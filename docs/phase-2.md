@@ -8,50 +8,60 @@
 5. [useMemo & useCallback](#usememo--usecallback)
 6. [Custom Hooks](#custom-hooks)
 7. [CSS Modules](#css-modules)
-8. [Inline Style Objects](#inline-style-objects)
-9. [Tailwind CSS](#tailwind-css)
-10. [className Conditionals](#classname-conditionals)
-11. [Assignment — Airbnb App with Hooks & Styling](#assignment--airbnb-app-with-hooks--styling)
+8. [Tailwind CSS](#tailwind-css)
+9. [className Conditionals](#classname-conditionals)
+10. [Assignment](#assignment)
 
 ---
 
 ## useEffect
 
-`useEffect` runs side effects after a component renders. Side effects are anything that reaches outside React — fetching data, setting up subscriptions, updating the document title, or directly manipulating the DOM.
+`useEffect` runs side effects after a component renders — data fetching, subscriptions, DOM manipulation, timers.
 
-### Dependency Array Patterns
+### Setup
+
+```bash
+# continuing from Phase 1 project
+cd airbnb-app
+npm run dev
+```
+
+### Dependency array patterns
 
 ```tsx
+// src/App.tsx
 import { useState, useEffect } from 'react'
+import type { Listing } from './types'
 
-function ListingsPage() {
-  const [listings, setListings] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState('')
+export default function App() {
+  const [listings, setListings] = useState<Listing[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [query, setQuery] = useState<string>('')
 
-  // Runs ONCE on mount — empty dependency array
+  // Runs ONCE on mount — empty dependency array []
   useEffect(() => {
-    fetchListings().then(data => {
-      setListings(data)
+    // simulate a 1.5s API fetch
+    const timer = setTimeout(() => {
+      setListings(mockListings)
       setLoading(false)
-    })
+    }, 1500)
+
+    // cleanup — runs when component unmounts
+    return () => clearTimeout(timer)
   }, [])
 
   // Runs every time 'query' changes
   useEffect(() => {
-    document.title = `Search: ${query} | Airbnb`
+    document.title = query ? `Search: ${query} | Airbnb` : 'Airbnb'
   }, [query])
 
-  // Runs on EVERY render — no dependency array (usually avoid this)
-  useEffect(() => {
-    console.log('Component rendered')
-  })
+  if (loading) return <p>Loading...</p>
+
+  return <div>{/* listings */}</div>
 }
 ```
 
-### Cleanup Function
-
-The function returned from `useEffect` runs when the component unmounts or before the effect runs again. Use it to cancel subscriptions, clear timers, or abort fetch requests.
+### Cleanup function
 
 ```tsx
 useEffect(() => {
@@ -59,94 +69,80 @@ useEffect(() => {
 
   async function load() {
     const data = await fetchListings()
-    // Guard against setting state on an unmounted component
+    // guard against setting state on an unmounted component
     if (!cancelled) setListings(data)
   }
 
   load()
 
-  // Cleanup — runs on unmount
-  return () => { cancelled = true }
+  return () => { cancelled = true }  // runs on unmount
 }, [])
 
-// Timer cleanup
+// timer cleanup
 useEffect(() => {
   const timer = setInterval(() => setTime(Date.now()), 1000)
-  return () => clearInterval(timer)  // clear on unmount
+  return () => clearInterval(timer)
 }, [])
 ```
 
-### Simulating a Fetch
-
-```tsx
-function useListings() {
-  const [listings, setListings] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setLoading(true)
-    // Simulate API delay
-    const timer = setTimeout(() => {
-      setListings(mockListings)
-      setLoading(false)
-    }, 1500)
-
-    return () => clearTimeout(timer)
-  }, [])
-
-  return { listings, loading, error }
-}
+**Run it:**
+```bash
+npm run dev
+# watch the loading state appear for 1.5s then listings render
 ```
 
 ---
 
 ## useRef
 
-`useRef` returns a mutable object whose `.current` property persists across renders without causing re-renders. Two main uses: accessing DOM elements directly, and storing values that shouldn't trigger re-renders.
+`useRef` holds a mutable value that persists across renders without causing re-renders. Two uses: DOM access and storing values that shouldn't trigger re-renders.
 
-### DOM Access
+### DOM access — auto-focus
 
 ```tsx
+// src/components/SearchBar.tsx
 import { useRef, useEffect } from 'react'
 
-function SearchBar() {
+interface SearchBarProps {
+  value: string
+  onChange: (value: string) => void
+}
+
+export function SearchBar({ value, onChange }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Auto-focus the input when the component mounts
+  // auto-focus on mount
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
-  const handleClear = () => {
-    if (inputRef.current) {
-      inputRef.current.value = ''
-      inputRef.current.focus()
-    }
-  }
-
   return (
-    <div>
-      <input ref={inputRef} placeholder="Search listings..." />
-      <button onClick={handleClear}>Clear</button>
-    </div>
+    <input
+      ref={inputRef}
+      type="text"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder="Search listings..."
+    />
   )
 }
 ```
 
-### Storing Values Without Re-renders
+### Storing values without re-renders
 
 ```tsx
-function Timer() {
-  const [elapsed, setElapsed] = useState(0)
-  // Store the interval ID — changing it shouldn't cause a re-render
+// src/components/Timer.tsx
+import { useState, useRef } from 'react'
+
+export function Timer() {
+  const [elapsed, setElapsed] = useState<number>(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const start = () => {
+  const start = (): void => {
     intervalRef.current = setInterval(() => setElapsed(e => e + 1), 1000)
   }
 
-  const stop = () => {
+  const stop = (): void => {
     if (intervalRef.current) clearInterval(intervalRef.current)
   }
 
@@ -164,32 +160,30 @@ function Timer() {
 
 ## useContext
 
-`useContext` reads a value from the nearest matching Context Provider above it in the component tree. It solves **prop drilling** — passing props through many layers just to reach a deeply nested component.
+`useContext` reads a value from the nearest Context Provider above it in the tree. Solves **prop drilling** — passing props through many layers just to reach a deeply nested component.
 
-### Creating and Using Context
+### Full example
 
 ```tsx
+// src/context/FavoritesContext.tsx
 import { createContext, useContext, useState } from 'react'
 
-// 1. Define the context shape
 interface FavoritesContextType {
   saved: number[]
   toggle: (id: number) => void
   count: number
 }
 
-// 2. Create the context with a default value
 const FavoritesContext = createContext<FavoritesContextType>({
   saved: [],
   toggle: () => {},
   count: 0,
 })
 
-// 3. Create a Provider component
-function FavoritesProvider({ children }: { children: React.ReactNode }) {
+export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   const [saved, setSaved] = useState<number[]>([])
 
-  const toggle = (id: number) =>
+  const toggle = (id: number): void =>
     setSaved(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     )
@@ -201,18 +195,35 @@ function FavoritesProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
-// 4. Custom hook for clean consumption
-function useFavorites() {
+// custom hook — always use this instead of useContext directly
+export function useFavorites(): FavoritesContextType {
   return useContext(FavoritesContext)
 }
+```
 
-// 5. Any component in the tree can read from context
-function SavedCount() {
+```tsx
+// src/main.tsx
+import { FavoritesProvider } from './context/FavoritesContext'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <FavoritesProvider>
+      <App />
+    </FavoritesProvider>
+  </StrictMode>
+)
+```
+
+```tsx
+// any component — reads from context without prop drilling
+import { useFavorites } from '../context/FavoritesContext'
+
+export function SavedCount() {
   const { count } = useFavorites()
   return <span>{count} saved</span>
 }
 
-function ListingCard({ id }: { id: number }) {
+export function HeartButton({ id }: { id: number }) {
   const { saved, toggle } = useFavorites()
   return (
     <button onClick={() => toggle(id)}>
@@ -220,54 +231,38 @@ function ListingCard({ id }: { id: number }) {
     </button>
   )
 }
-
-// 6. Wrap your app with the Provider
-function App() {
-  return (
-    <FavoritesProvider>
-      <SavedCount />
-      <ListingsGrid />
-    </FavoritesProvider>
-  )
-}
 ```
 
-### When to Use Context
-
-Context is not a replacement for all state. Use it for:
-- Theme (dark/light mode)
-- Current user / auth state
-- Language / locale
-- Shared data needed by many components at different nesting levels
-
-For local state that only one or two components need, stick with `useState`.
+**Run it:**
+```bash
+npm run dev
+# click hearts — SavedCount updates without any prop passing
+```
 
 ---
 
 ## useReducer
 
-`useReducer` is an alternative to `useState` for managing complex state with multiple sub-values or when the next state depends on the previous one in non-trivial ways.
+`useReducer` manages complex state with multiple related values. Better than multiple `useState` calls when state updates are interconnected.
 
 ```tsx
-import { useReducer } from 'react'
+// src/store/reducer.ts
+import type { Listing } from '../types'
 
-// 1. Define state shape
-type State = {
+export type State = {
   listings: Listing[]
   loading: boolean
   filter: string
   saved: number[]
 }
 
-// 2. Define all possible actions as a union type
-type Action =
+export type Action =
   | { type: 'SET_LISTINGS'; payload: Listing[] }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_FILTER'; payload: string }
   | { type: 'TOGGLE_FAVORITE'; payload: number }
 
-// 3. Pure reducer function — no side effects, always returns new state
-function reducer(state: State, action: Action): State {
+export function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_LISTINGS':
       return { ...state, listings: action.payload }
@@ -286,112 +281,135 @@ function reducer(state: State, action: Action): State {
       return state
   }
 }
-
-// 4. Use in a component
-function ListingsPage() {
-  const [state, dispatch] = useReducer(reducer, {
-    listings: [],
-    loading: true,
-    filter: '',
-    saved: [],
-  })
-
-  // Dispatch actions instead of calling multiple setters
-  dispatch({ type: 'SET_FILTER', payload: 'Bali' })
-  dispatch({ type: 'TOGGLE_FAVORITE', payload: 3 })
-}
 ```
 
-### useState vs useReducer
+```tsx
+// src/App.tsx
+import { useReducer, useEffect } from 'react'
+import { reducer } from './store/reducer'
+import type { State } from './store/reducer'
 
-| Situation | Use |
-|-----------|-----|
-| Simple independent values | `useState` |
-| Next state depends on previous | `useReducer` |
-| Multiple related values that change together | `useReducer` |
-| Complex update logic | `useReducer` |
-| Sharing update logic across components | `useReducer` |
+const initialState: State = {
+  listings: [],
+  loading: true,
+  filter: '',
+  saved: [],
+}
+
+export default function App() {
+  const [state, dispatch] = useReducer(reducer, initialState)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      dispatch({ type: 'SET_LISTINGS', payload: mockListings })
+      dispatch({ type: 'SET_LOADING', payload: false })
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [])
+
+  return (
+    <div>
+      <input
+        value={state.filter}
+        onChange={e => dispatch({ type: 'SET_FILTER', payload: e.target.value })}
+        placeholder="Search..."
+      />
+    </div>
+  )
+}
+```
 
 ---
 
 ## useMemo & useCallback
 
-Both are performance optimizations that memoize values to avoid unnecessary recalculations or re-renders.
+Both memoize values to avoid unnecessary recalculations or re-renders.
 
-### useMemo — Memoize Computed Values
+### useMemo — expensive computations
 
 ```tsx
 import { useMemo } from 'react'
+import type { Listing } from './types'
 
-function ListingsPage({ listings, query, maxPrice }) {
-  // Without useMemo — recalculates on every render even if listings/query didn't change
-  const filtered = listings.filter(l =>
-    l.title.toLowerCase().includes(query.toLowerCase()) &&
-    l.price <= maxPrice
-  )
+interface Props {
+  listings: Listing[]
+  query: string
+  maxPrice: number
+}
 
-  // With useMemo — only recalculates when listings, query, or maxPrice changes
-  const filtered = useMemo(() =>
+function ListingsPage({ listings, query, maxPrice }: Props) {
+  // recalculates ONLY when listings, query, or maxPrice changes
+  const filtered = useMemo<Listing[]>(() =>
     listings.filter(l =>
       l.title.toLowerCase().includes(query.toLowerCase()) &&
       l.price <= maxPrice
     ),
     [listings, query, maxPrice]
   )
+
+  return (
+    <div>
+      {filtered.map(l => <div key={l.id}>{l.title}</div>)}
+    </div>
+  )
 }
 ```
 
-### useCallback — Memoize Functions
+### useCallback — stable function references
 
 ```tsx
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 
 function ListingsPage() {
   const [saved, setSaved] = useState<number[]>([])
 
-  // Without useCallback — new function reference on every render
-  // This causes child components wrapped in React.memo to re-render unnecessarily
-  const handleToggle = (id: number) =>
-    setSaved(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  // stable reference — won't cause React.memo children to re-render
+  const handleToggle = useCallback((id: number): void => {
+    setSaved(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }, [])
 
-  // With useCallback — stable function reference across renders
-  const handleToggle = useCallback((id: number) =>
-    setSaved(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]),
-    []  // no dependencies — function never needs to change
+  return (
+    <div>
+      {listings.map(l => (
+        <ListingCard key={l.id} listing={l} onToggleSave={() => handleToggle(l.id)} />
+      ))}
+    </div>
   )
-
-  return listings.map(l => (
-    <ListingCard key={l.id} {...l} onToggleSave={() => handleToggle(l.id)} />
-  ))
 }
 ```
-
-### When to Use Them
-
-Don't add `useMemo` and `useCallback` everywhere — they have overhead too. Use them when:
-- A computation is genuinely expensive (large array filtering, sorting)
-- A function is passed as a prop to a `React.memo` wrapped component
-- A value is used as a dependency in another `useEffect` or `useMemo`
 
 ---
 
 ## Custom Hooks
 
-A custom hook is a function that starts with `use` and calls other hooks. It lets you extract and reuse stateful logic across multiple components.
+A custom hook is a function that starts with `use` and calls other hooks. Extracts and reuses stateful logic.
 
 ```tsx
-// useListings — encapsulates fetch + loading + error + refresh
-function useListings() {
+// src/hooks/useListings.ts
+import { useState, useEffect } from 'react'
+import type { Listing } from '../types'
+
+interface UseListingsReturn {
+  listings: Listing[]
+  loading: boolean
+  error: string | null
+  refresh: () => void
+}
+
+export function useListings(): UseListingsReturn {
   const [listings, setListings] = useState<Listing[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = async () => {
+  const refresh = async (): Promise<void> => {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchListings()
-      setListings(data)
+      // replace with real fetch in Phase 4
+      await new Promise(r => setTimeout(r, 1500))
+      setListings(mockListings)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
@@ -403,45 +421,55 @@ function useListings() {
 
   return { listings, loading, error, refresh }
 }
+```
 
-// useFavorites — encapsulates saved state and toggle logic
-function useFavorites() {
+```tsx
+// src/hooks/useFavorites.ts
+import { useState } from 'react'
+
+interface UseFavoritesReturn {
+  saved: number[]
+  toggle: (id: number) => void
+  count: number
+  isSaved: (id: number) => boolean
+}
+
+export function useFavorites(): UseFavoritesReturn {
   const [saved, setSaved] = useState<number[]>([])
 
-  const toggle = (id: number) =>
-    setSaved(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  const toggle = (id: number): void =>
+    setSaved(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
 
-  return { saved, toggle, count: saved.length, isSaved: (id: number) => saved.includes(id) }
-}
-
-// useLocalStorage — persists state to localStorage
-function useLocalStorage<T>(key: string, initial: T) {
-  const [value, setValue] = useState<T>(() => {
-    const stored = localStorage.getItem(key)
-    return stored ? JSON.parse(stored) : initial
-  })
-
-  const set = (newValue: T) => {
-    setValue(newValue)
-    localStorage.setItem(key, JSON.stringify(newValue))
+  return {
+    saved,
+    toggle,
+    count: saved.length,
+    isSaved: (id: number) => saved.includes(id),
   }
-
-  return [value, set] as const
 }
+```
 
-// Clean component — all logic lives in hooks
-function ListingsPage() {
+```tsx
+// src/App.tsx — clean component, all logic in hooks
+import { useListings } from './hooks/useListings'
+import { useFavorites } from './hooks/useFavorites'
+
+export default function App() {
   const { listings, loading, error, refresh } = useListings()
   const { saved, toggle, count } = useFavorites()
 
-  if (loading) return <Spinner />
+  if (loading) return <p>Loading...</p>
   if (error) return <p>{error} <button onClick={refresh}>Retry</button></p>
 
   return (
     <div>
       <p>{count} saved</p>
       {listings.map(l => (
-        <ListingCard key={l.id} {...l}
+        <ListingCard
+          key={l.id}
+          listing={l}
           saved={saved.includes(l.id)}
           onToggleSave={() => toggle(l.id)}
         />
@@ -451,14 +479,23 @@ function ListingsPage() {
 }
 ```
 
+**Run it:**
+```bash
+npm run dev
+```
+
 ---
 
 ## CSS Modules
 
-CSS Modules scope styles to a single component by auto-generating unique class names at build time. No global conflicts — `.card` in `ListingCard.module.css` won't clash with `.card` anywhere else.
+CSS Modules scope styles to a single component — `.card` here won't clash with `.card` anywhere else.
+
+### Setup
+
+No installation needed — Vite supports CSS Modules out of the box. Name your file `*.module.css`.
 
 ```css
-/* ListingCard.module.css */
+/* src/components/ListingCard.module.css */
 .card {
   background: #fff;
   border: 1px solid #e0e0e0;
@@ -478,7 +515,9 @@ CSS Modules scope styles to a single component by auto-generating unique class n
   object-fit: cover;
 }
 
-.body { padding: 12px; }
+.body {
+  padding: 12px;
+}
 
 .title {
   font-size: 14px;
@@ -493,28 +532,27 @@ CSS Modules scope styles to a single component by auto-generating unique class n
   padding: 2px 8px;
   border-radius: 20px;
 }
-
-/* Variant — combined with base class */
-.badge--superhost {
-  background: #FF385C;
-  color: #fff;
-}
 ```
 
 ```tsx
-// ListingCard.tsx
+// src/components/ListingCard.tsx
 import styles from './ListingCard.module.css'
+import type { Listing } from '../types'
 
-function ListingCard({ title, superhost, img }: Props) {
+interface ListingCardProps {
+  listing: Listing
+  saved: boolean
+  onToggleSave: () => void
+}
+
+export function ListingCard({ listing, saved, onToggleSave }: ListingCardProps) {
   return (
     <div className={styles.card}>
-      <img src={img} className={styles.image} alt={title} />
+      <img src={listing.img} alt={listing.title} className={styles.image} />
       <div className={styles.body}>
-        <h4 className={styles.title}>{title}</h4>
-        {superhost && (
-          <span className={`${styles.badge} ${styles['badge--superhost']}`}>
-            Superhost
-          </span>
+        <h4 className={styles.title}>{listing.title}</h4>
+        {listing.superhost && (
+          <span className={styles.badge}>Superhost</span>
         )}
       </div>
     </div>
@@ -524,48 +562,11 @@ function ListingCard({ title, superhost, img }: Props) {
 
 ---
 
-## Inline Style Objects
-
-Pass a JavaScript object to the `style` prop. Property names are camelCase. Good for dynamic values — bad for hover states and media queries (use CSS for those).
-
-```tsx
-function ListingCard({ price, superhost }: Props) {
-  const cardStyle: React.CSSProperties = {
-    background: '#fff',
-    borderRadius: 12,
-    overflow: 'hidden',
-    border: '1px solid #e0e0e0',
-  }
-
-  return (
-    <div style={cardStyle}>
-      {/* Dynamic color based on price */}
-      <strong style={{ color: price > 300 ? '#FF385C' : '#1a1a1a' }}>
-        ${price}
-      </strong>
-
-      {/* Dynamic background based on prop */}
-      <span style={{
-        background: superhost ? 'rgba(255,56,92,0.1)' : '#f0f0f0',
-        color: superhost ? '#FF385C' : '#888',
-        padding: '2px 8px',
-        borderRadius: 20,
-        fontSize: 11,
-      }}>
-        {superhost ? 'Superhost' : 'Host'}
-      </span>
-    </div>
-  )
-}
-```
-
----
-
 ## Tailwind CSS
 
-Tailwind is a utility-first CSS framework. You compose styles using small single-purpose class names directly in JSX — no separate CSS files needed.
+Utility-first CSS — compose styles using class names directly in JSX.
 
-### Setup with Vite
+### Setup
 
 ```bash
 npm install -D tailwindcss @tailwindcss/vite
@@ -573,36 +574,41 @@ npm install -D tailwindcss @tailwindcss/vite
 
 ```ts
 // vite.config.ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-export default defineConfig({ plugins: [react(), tailwindcss()] })
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+})
 ```
 
 ```css
-/* index.css */
+/* src/index.css */
 @import "tailwindcss";
 ```
 
-### Usage
-
 ```tsx
-function ListingCard({ title, location, price, rating, superhost, img }: Props) {
-  return (
-    <div className="rounded-xl overflow-hidden border border-gray-200 hover:shadow-lg hover:-translate-y-1 transition-all">
-      <img src={img} alt={title} className="w-full h-48 object-cover" />
+// src/components/ListingCard.tsx
+import type { Listing } from '../types'
 
+interface ListingCardProps {
+  listing: Listing
+}
+
+export function ListingCard({ listing }: ListingCardProps) {
+  return (
+    <div className="rounded-xl overflow-hidden border border-gray-200 hover:shadow-lg hover:-translate-y-1 transition-all bg-white">
+      <img src={listing.img} alt={listing.title} className="w-full h-48 object-cover" />
       <div className="p-3">
         <div className="flex justify-between items-center mb-1">
-          <span className="text-xs text-gray-500">{location}</span>
-          <span className="text-xs text-gray-500">★ {rating}</span>
+          <span className="text-xs text-gray-500">{listing.location}</span>
+          <span className="text-xs text-gray-500">★ {listing.rating}</span>
         </div>
-
-        <h4 className="text-sm font-semibold text-gray-900 mb-2">{title}</h4>
-
+        <h4 className="text-sm font-semibold text-gray-900 mb-2">{listing.title}</h4>
         <div className="flex justify-between items-center">
-          <span className="text-sm">
-            <strong className="text-[#FF385C]">${price}</strong> / night
-          </span>
-          {superhost && (
+          <span className="text-sm font-bold text-[#FF385C]">${listing.price} / night</span>
+          {listing.superhost && (
             <span className="text-xs font-semibold bg-red-50 text-[#FF385C] px-2 py-0.5 rounded-full">
               Superhost
             </span>
@@ -614,118 +620,35 @@ function ListingCard({ title, location, price, rating, superhost, img }: Props) 
 }
 ```
 
+**Run it:**
+```bash
+npm run dev
+```
+
 ---
 
 ## className Conditionals
 
 ```tsx
-// Method 1: Template literal
-<div className={`card ${isActive ? 'card--active' : ''} ${superhost ? 'card--featured' : ''}`}>
+// Method 1: template literal
+<div className={`card ${isActive ? 'card--active' : ''}`}>
 
-// Method 2: Array filter and join
-<div className={['card', isActive && 'card--active', superhost && 'card--featured'].filter(Boolean).join(' ')}>
+// Method 2: array join
+<div className={['card', isActive && 'card--active'].filter(Boolean).join(' ')}>
 
-// Method 3: clsx library (most popular)
+// Method 3: clsx (recommended)
 // npm install clsx
 import clsx from 'clsx'
 <div className={clsx('card', { 'card--active': isActive, 'card--featured': superhost })}>
-
-// Method 4: Tailwind with cn utility (shadcn/ui pattern)
-import { cn } from '@/lib/utils'
-<div className={cn('rounded-xl border', isActive && 'border-red-500', superhost && 'bg-red-50')}>
 ```
 
 ---
 
-## Assignment — Airbnb App with Hooks & Styling
+## Assignment
 
-> Refactor your Phase 1 listings page to use core hooks, Context, useReducer, and apply consistent styling with CSS Modules or Tailwind.
+> See **[assignment-2.md](./assignment-2.md)** for the full description, file structure, acceptance criteria, and submission checklist.
 
-### Tasks
-
-1. Wrap your app in a `FavoritesContext` Provider — any component can read saved listings without prop drilling
-2. Move all state into a `useReducer` with actions: `SET_LISTINGS`, `SET_LOADING`, `SET_FILTER`, `TOGGLE_FAVORITE`
-3. Add a `useEffect` that simulates fetching listings with a 1.5s delay — show a spinner while loading
-4. Use `useRef` to auto-focus the search input when the page loads
-5. Extract a `useListings()` custom hook that handles the simulated fetch, loading, and error states
-6. Extract a `useFavorites()` custom hook that reads from `FavoritesContext`
-7. Add a `<SavedListings />` panel that reads from context and shows saved listing titles
-8. Wrap your filtered computation in `useMemo`
-9. Style your `ListingCard` with CSS Modules — add hover lift effect, responsive grid, styled search bar
-10. Add a **Superhost** variant style that gives featured cards a colored border
-
-### Starter Code
-
-```tsx
-// src/context/FavoritesContext.tsx
-import { createContext, useContext, useReducer } from 'react'
-
-type State = {
-  listings: Listing[]
-  loading: boolean
-  filter: string
-  saved: number[]
-}
-
-type Action =
-  | { type: 'SET_LISTINGS'; payload: Listing[] }
-  | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'SET_FILTER'; payload: string }
-  | { type: 'TOGGLE_FAVORITE'; payload: number }
-
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case 'SET_LISTINGS': // TODO
-    case 'SET_LOADING':  // TODO
-    case 'SET_FILTER':   // TODO
-    case 'TOGGLE_FAVORITE': // TODO
-    default: return state
-  }
-}
-
-const FavoritesContext = createContext<{
-  state: State
-  dispatch: React.Dispatch<Action>
-}>({ state: { listings: [], loading: true, filter: '', saved: [] }, dispatch: () => {} })
-
-export function FavoritesProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, {
-    listings: [], loading: true, filter: '', saved: [],
-  })
-  return (
-    <FavoritesContext.Provider value={{ state, dispatch }}>
-      {children}
-    </FavoritesContext.Provider>
-  )
-}
-
-export const useFavoritesContext = () => useContext(FavoritesContext)
-
-// src/hooks/useListings.ts
-export function useListings() {
-  const { dispatch } = useFavoritesContext()
-
-  useEffect(() => {
-    dispatch({ type: 'SET_LOADING', payload: true })
-    const timer = setTimeout(() => {
-      // TODO: dispatch SET_LISTINGS with mock data
-      // TODO: dispatch SET_LOADING false
-    }, 1500)
-    return () => clearTimeout(timer)
-  }, [])
-}
-
-// src/components/SavedListings.tsx
-export function SavedListings() {
-  const { state } = useFavoritesContext()
-  const savedListings = state.listings.filter(l => state.saved.includes(l.id))
-  // TODO: render saved listing titles
-}
-```
-
-### Expected Output
-
-App loads with a spinner, listings appear after 1.5s, search input is auto-focused. Favorites are shared via Context — the SavedListings panel updates when you toggle hearts. All state lives in useReducer. Cards are styled with CSS Modules including hover effects and a responsive grid.
+**Summary:** Refactor your Phase 1 app to use `useReducer`, `FavoritesContext`, custom hooks (`useListings`, `useFavorites`), a simulated fetch with spinner, `useRef` auto-focus, and CSS Modules styling.
 
 ---
 
@@ -735,4 +658,3 @@ App loads with a spinner, listings appear after 1.5s, search input is auto-focus
 - [React Docs — useReducer](https://react.dev/reference/react/useReducer)
 - [React Docs — Custom Hooks](https://react.dev/learn/reusing-logic-with-custom-hooks)
 - [Tailwind CSS Docs](https://tailwindcss.com/docs)
-- [CSS Modules](https://github.com/css-modules/css-modules)

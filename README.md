@@ -45,9 +45,11 @@ Open [http://localhost:5173](http://localhost:5173)
 
 ## Docs
 
-- [Phase 1 — Foundations](./docs/phase-1.md)
-- [Phase 2 — Hooks & Styling](./docs/phase-2.md)
-- [Phase 3 — Advanced](./docs/phase-3.md)
-- [Phase 4 — Real-World Skills](./docs/phase-4.md)
-- [Phase 5 — Patterns & TypeScript](./docs/phase-5.md)
-- [Phase 6 — Production](./docs/phase-6.md)
+| Phase | Lesson | Assignment |
+|-------|--------|------------|
+| [Phase 1 — Foundations](./docs/phase-1.md) | JSX, Components, Props, useState, Events | [Assignment 1](./docs/assignment-1.md) |
+| [Phase 2 — Hooks & Styling](./docs/phase-2.md) | useEffect, useRef, useContext, useReducer, CSS Modules, Tailwind | [Assignment 2](./docs/assignment-2.md) |
+| [Phase 3 — Advanced](./docs/phase-3.md) | React Router v6, Zustand, React.memo, Virtualization | [Assignment 3](./docs/assignment-3.md) |
+| [Phase 4 — Real-World Skills](./docs/phase-4.md) | TanStack Query, Multi-Step Forms, Validation, Testing | [Assignment 4](./docs/assignment-4.md) |
+| [Phase 5 — Patterns & TypeScript](./docs/phase-5.md) | HOCs, Compound Components, Generics, Full TypeScript | [Assignment 5](./docs/assignment-5.md) |
+| [Phase 6 — Production](./docs/phase-6.md) | Vite Build, Vercel, CI/CD, Next.js App Router | [Assignment 6](./docs/assignment-6.md) |

@@ -470,11 +470,24 @@ function VirtualListings() {
 
 ---
 
-## Assignment — Multi-Page Airbnb App with Global State
+## Assignment
 
-> Build a multi-page Airbnb app with React Router v6, a Zustand global store, React.memo optimization, and a virtualized listings list.
+> See **[assignment-3.md](./assignment-3.md)** for the full description, file structure, acceptance criteria, and submission checklist.
 
-### Tasks
+**Summary:** Build a multi-page Airbnb app with React Router v6, a Zustand global store, `React.memo` optimization, and a virtualized list of 50 items.
+
+---
+
+**Resources**
+- [React Router v6 Docs](https://reactrouter.com/en/main)
+- [Zustand Docs](https://zustand-demo.pmnd.rs)
+- [React Docs — lazy](https://react.dev/reference/react/lazy)
+- [React Docs — memo](https://react.dev/reference/react/memo)
+- [react-window Docs](https://react-window.vercel.app)
+
+<!-- original tasks below for reference -->
+
+### Tasks (see assignment-3.md for full details)
 
 1. Install `react-router-dom` and wrap your app in `BrowserRouter`
 2. Create these pages: `Home` (listings grid), `ListingDetail` (dynamic `:id`), `Login`, `Dashboard`
