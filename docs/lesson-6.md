@@ -15,7 +15,7 @@
 12. [Server Actions](#server-actions)
 13. [Next.js Image Optimization](#nextjs-image-optimization)
 14. [API Routes](#api-routes)
-15. [Assignment — Production-Ready Airbnb App](#assignment--production-ready-airbnb-app)
+15. [Assignment](#assignment)
 
 ---
 
@@ -28,6 +28,8 @@ npm run build    # outputs to dist/
 npm run preview  # serve dist/ locally to test the production build
 ```
 
+**Always run `npm run preview` before deploying.** The production build behaves differently from the dev server — it catches issues like missing env vars, broken imports, and routing problems.
+
 ### vite.config.ts
 
 ```ts
@@ -38,13 +40,14 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
-    sourcemap: false,           // disable in production — reduces bundle size
-    minify: 'esbuild',          // fast minification
+    sourcemap: false,           // disable in production — reduces bundle size and hides source code
+    minify: 'esbuild',          // fast minification (esbuild is ~10x faster than terser)
     chunkSizeWarningLimit: 500, // warn if a chunk exceeds 500kb
     rollupOptions: {
       output: {
         // Split vendor libraries into a separate chunk
-        // Browser caches it separately — users don't re-download React on every deploy
+        // The browser caches vendor.js separately — users don't re-download React on every deploy
+        // Only your app code changes between deploys, not React or React Router
         manualChunks: {
           vendor: ['react', 'react-dom'],
           router: ['react-router-dom'],
@@ -70,10 +73,10 @@ export default defineConfig({
 
 ## Environment Variables
 
-Environment variables let you use different values in development vs production without changing your code.
+Environment variables let you use different values in development vs production without changing your code. This is how you avoid hardcoding API URLs, tokens, and feature flags.
 
 ```bash
-# .env.local — local development (never commit to Git)
+# .env.local — local development (never commit to Git — contains secrets)
 VITE_API_URL=http://localhost:3000/api
 VITE_MAPBOX_TOKEN=pk.dev.abc123
 VITE_ENABLE_ANALYTICS=false
@@ -88,16 +91,17 @@ VITE_ENABLE_ANALYTICS=true
 
 - Must start with `VITE_` to be exposed to client-side code
 - Access via `import.meta.env.VITE_*`
-- Never put secrets (database passwords, private API keys) in `VITE_` variables — they are bundled into the JavaScript and visible to anyone
+- **Never put secrets** (database passwords, private API keys) in `VITE_` variables — they are bundled into the JavaScript and visible to anyone who opens DevTools
 
 ```ts
 // src/config/env.ts — centralize all env var access
+// This gives you one place to see all env vars and add validation
 export const config = {
   apiUrl: import.meta.env.VITE_API_URL as string,
   mapboxToken: import.meta.env.VITE_MAPBOX_TOKEN as string,
   analyticsEnabled: import.meta.env.VITE_ENABLE_ANALYTICS === 'true',
-  isDev: import.meta.env.DEV,    // built-in Vite boolean
-  isProd: import.meta.env.PROD,  // built-in Vite boolean
+  isDev: import.meta.env.DEV,    // built-in Vite boolean — true in dev
+  isProd: import.meta.env.PROD,  // built-in Vite boolean — true in production
 }
 
 // Usage
@@ -119,8 +123,9 @@ dist/
 
 ## Bundle Analysis & Optimization
 
+Before optimizing, measure. The bundle visualizer shows you exactly what's in your bundle and how large each piece is.
+
 ```bash
-# Install bundle analyzer
 npm install -D rollup-plugin-visualizer
 ```
 
@@ -131,7 +136,7 @@ import { visualizer } from 'rollup-plugin-visualizer'
 export default defineConfig({
   plugins: [
     react(),
-    visualizer({ open: true, gzipSize: true }),  // opens a visual report after build
+    visualizer({ open: true, gzipSize: true }),  // opens a visual treemap after build
   ],
 })
 ```
@@ -139,15 +144,15 @@ export default defineConfig({
 ### Common Optimizations
 
 ```tsx
-// 1. Lazy load heavy routes
+// 1. Lazy load heavy routes — only download when visited
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const BookingForm = lazy(() => import('./pages/BookingForm'))
 
-// 2. Dynamic imports for large libraries
+// 2. Dynamic imports for large libraries used rarely
 const { Chart } = await import('chart.js')
 
 // 3. Avoid importing entire libraries
-// WRONG — imports all of lodash (~70kb)
+// WRONG — imports all of lodash (~70kb gzipped)
 import _ from 'lodash'
 const result = _.groupBy(listings, 'location')
 
@@ -155,7 +160,8 @@ const result = _.groupBy(listings, 'location')
 import groupBy from 'lodash/groupBy'
 const result = groupBy(listings, 'location')
 
-// 4. Preload critical routes
+// 4. Preload critical routes — browser downloads them in the background
+// Add to index.html for routes users are likely to visit
 <link rel="modulepreload" href="/assets/ListingDetail.abc123.js" />
 ```
 
@@ -178,7 +184,7 @@ vercel --prod   # deploy to production
 2. Go to [vercel.com](https://vercel.com) → New Project → Import Git Repository
 3. Select your repo — Vercel auto-detects Vite, no config needed
 4. Every push to `main` auto-deploys to production
-5. Every pull request gets a unique preview URL
+5. Every pull request gets a unique preview URL for review
 
 ```json
 // vercel.json — required for React Router (SPA routing)
@@ -187,18 +193,18 @@ vercel --prod   # deploy to production
 }
 ```
 
-Without this, refreshing on `/listings/3` returns a 404 because Vercel looks for a file at that path.
+**Why this is needed:** When a user visits `/listings/3` directly (or refreshes), Vercel looks for a file at that path. It doesn't exist — only `index.html` does. This rewrite rule tells Vercel to serve `index.html` for all paths, and React Router handles the routing client-side.
 
 ### Environment Variables on Vercel
 
-Go to Project Settings → Environment Variables and add your `VITE_*` variables. Vercel injects them at build time.
+Go to Project Settings → Environment Variables and add your `VITE_*` variables. Vercel injects them at build time — they're baked into the JavaScript bundle.
 
 ---
 
 ## Deploying to Netlify
 
 ```bash
-# netlify.toml — Netlify config file
+# netlify.toml — Netlify config file (commit this to your repo)
 [build]
   command = "npm run build"
   publish = "dist"
@@ -209,22 +215,23 @@ Go to Project Settings → Environment Variables and add your `VITE_*` variables
   status = 200
 ```
 
-Same as Vercel — connect your GitHub repo and Netlify auto-deploys on every push.
+Same as Vercel — connect your GitHub repo and Netlify auto-deploys on every push. The `[[redirects]]` rule serves the same purpose as Vercel's `rewrites` — it handles React Router's client-side routing.
 
 ---
 
 ## AWS S3 + CloudFront
 
-For teams already on AWS, S3 + CloudFront is a cost-effective and highly scalable option.
+For teams already on AWS, S3 + CloudFront is a cost-effective and highly scalable option. S3 stores the static files; CloudFront is a CDN that serves them from edge locations close to users worldwide.
 
 ```bash
 # Build your app
 npm run build
 
-# Upload to S3
+# Upload to S3 — --delete removes files that no longer exist in dist/
 aws s3 sync dist/ s3://your-bucket-name --delete
 
 # Invalidate CloudFront cache after deploy
+# Without this, users get the old cached version for up to 24 hours
 aws cloudfront create-invalidation \
   --distribution-id YOUR_DISTRIBUTION_ID \
   --paths "/*"
@@ -241,7 +248,7 @@ aws cloudfront create-invalidation \
 
 ## CI/CD with GitHub Actions
 
-Every push to `main` automatically runs tests and deploys to Vercel.
+CI/CD (Continuous Integration / Continuous Deployment) automates testing and deployment. Every push to `main` automatically runs tests and deploys — no manual steps.
 
 ```yaml
 # .github/workflows/deploy.yml
@@ -263,10 +270,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'npm'  # cache node_modules between runs — faster CI
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci  # ci is faster and stricter than npm install — uses package-lock.json exactly
 
       - name: Run tests
         run: npm test
@@ -274,8 +281,9 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}  # inject secrets at build time
 
+      # Only deploy on pushes to main, not on pull requests
       - name: Deploy to Vercel
         if: github.ref == 'refs/heads/main'
         uses: amondnet/vercel-action@v25
@@ -286,7 +294,7 @@ jobs:
           vercel-args: '--prod'
 ```
 
-Add your secrets in GitHub → Repository Settings → Secrets and variables → Actions.
+Add your secrets in GitHub → Repository Settings → Secrets and variables → Actions. Secrets are encrypted and never exposed in logs.
 
 ---
 
@@ -310,16 +318,20 @@ npx create-next-app@latest airbnb-clone --typescript --tailwind --app
 | Image optimization | Manual | Built-in `<Image>` |
 | Deployment | Any static host | Vercel (optimal) |
 
+**When to choose Next.js:** SEO matters (public-facing pages), you need server-side data fetching, or you want a full-stack solution in one project.
+
+**When to stick with Vite + React:** Internal tools, dashboards, apps behind auth (SEO doesn't matter), or when you want maximum simplicity.
+
 ---
 
 ## App Router vs Pages Router
 
-Next.js has two routing systems. The **App Router** (Next.js 13+) is the modern approach.
+Next.js has two routing systems. The **App Router** (Next.js 13+) is the modern approach and what you should use for new projects.
 
 ```
 App Router (app/ directory) — modern, recommended
 app/
-  layout.tsx          # root layout — wraps all pages
+  layout.tsx          # root layout — wraps all pages, persists across navigation
   page.tsx            # / route
   listings/
     page.tsx          # /listings
@@ -331,7 +343,7 @@ app/
     listings/
       route.ts        # /api/listings
 
-Pages Router (pages/ directory) — legacy
+Pages Router (pages/ directory) — legacy, still supported
 pages/
   index.tsx           # /
   listings/
@@ -339,25 +351,29 @@ pages/
     [id].tsx          # /listings/[id]
 ```
 
+**Key difference:** The App Router uses React Server Components by default. The Pages Router uses Client Components by default. This changes how you think about data fetching and rendering.
+
 ---
 
 ## Server Components vs Client Components
 
-This is the most important concept in the App Router.
+This is the most important concept in the App Router. Understanding the boundary between server and client is essential.
 
 ### Server Components (default)
 
-- Run on the server — zero JavaScript sent to the client
-- Can be `async` — fetch data directly without `useEffect`
+- Run on the server — zero JavaScript sent to the client for these components
+- Can be `async` — fetch data directly without `useEffect` or TanStack Query
 - Cannot use `useState`, `useEffect`, or event handlers
-- Cannot access browser APIs
+- Cannot access browser APIs (`window`, `document`, `localStorage`)
+- Can access server-only resources (databases, file system, environment secrets)
 
 ```tsx
-// app/listings/page.tsx — Server Component (no 'use client')
+// app/listings/page.tsx — Server Component (no 'use client' directive)
 import { db } from '@/lib/db'
 
 export default async function ListingsPage() {
-  // Runs on the server — direct DB access, no API round-trip
+  // This runs on the server — direct DB access, no API round-trip, no loading state needed
+  // The HTML is generated on the server and sent to the browser fully rendered
   const listings = await db.listings.findMany({
     orderBy: { rating: 'desc' },
   })
@@ -380,6 +396,7 @@ export default async function ListingsPage() {
 - Run in the browser — JavaScript is sent to the client
 - Can use `useState`, `useEffect`, event handlers, browser APIs
 - Must be marked with `'use client'` at the top of the file
+- Still server-rendered on first load (for SEO and performance), then hydrated
 
 ```tsx
 // components/FavoriteButton.tsx — Client Component
@@ -400,28 +417,29 @@ export function FavoriteButton({ listingId }: { listingId: number }) {
 
 ### The Rule
 
-Keep components as Server Components by default. Only add `'use client'` when you need interactivity, state, or browser APIs. Push client components as far down the tree as possible.
+Keep components as Server Components by default. Only add `'use client'` when you need interactivity, state, or browser APIs. Push client components as far **down** the tree as possible — this minimizes the JavaScript sent to the browser.
 
 ```
-app/listings/page.tsx          → Server Component (fetches data)
-  └── ListingCard.tsx          → Server Component (renders data)
-        └── FavoriteButton.tsx → Client Component (needs useState)
+app/listings/page.tsx          → Server Component (fetches data, no JS sent)
+  └── ListingCard.tsx          → Server Component (renders data, no JS sent)
+        └── FavoriteButton.tsx → Client Component (needs useState — JS sent for this only)
 ```
 
 ---
 
 ## SSR, SSG, and ISR
 
+Next.js gives you three rendering strategies. The right choice depends on how often the data changes and how important SEO is.
+
 ### SSR — Server-Side Rendering
 
-HTML is generated on the server for every request. Always fresh data.
+HTML is generated on the server for **every request**. Always fresh data. Use for pages where data changes frequently and must be up-to-date (e.g., booking availability).
 
 ```tsx
 // app/listings/[id]/page.tsx
-// This is SSR by default in the App Router — runs on every request
 export default async function ListingDetail({ params }: { params: { id: string } }) {
   const listing = await fetch(`https://api.example.com/listings/${params.id}`, {
-    cache: 'no-store',  // always fetch fresh data
+    cache: 'no-store',  // opt out of caching — always fetch fresh data
   }).then(r => r.json())
 
   return <div>{listing.title}</div>
@@ -430,13 +448,14 @@ export default async function ListingDetail({ params }: { params: { id: string }
 
 ### SSG — Static Site Generation
 
-HTML is generated at build time. Fastest possible load — served from CDN.
+HTML is generated at **build time**. Fastest possible load — served from CDN. Use for pages where data rarely changes (e.g., listing descriptions, blog posts).
 
 ```tsx
 // app/listings/[id]/page.tsx
-// generateStaticParams — pre-render all listing pages at build time
+// generateStaticParams — tells Next.js which IDs to pre-render at build time
 export async function generateStaticParams() {
   const listings = await fetch('https://api.example.com/listings').then(r => r.json())
+  // Returns [{ id: '1' }, { id: '2' }, { id: '3' }, ...]
   return listings.map((l: Listing) => ({ id: String(l.id) }))
 }
 
@@ -448,23 +467,30 @@ export default async function ListingDetail({ params }: { params: { id: string }
 
 ### ISR — Incremental Static Regeneration
 
-Pages are statically generated but automatically regenerated in the background after a set time. Best of both worlds.
+Pages are statically generated but automatically regenerated in the background after a set time. Best of both worlds — CDN speed with reasonably fresh data.
 
 ```tsx
 export default async function ListingsPage() {
   const listings = await fetch('https://api.example.com/listings', {
-    next: { revalidate: 60 },  // regenerate this page every 60 seconds
+    next: { revalidate: 60 },  // regenerate this page at most every 60 seconds
   }).then(r => r.json())
 
   return <ListingsGrid listings={listings} />
 }
 ```
 
+**Choosing a strategy:**
+- Data changes every request → SSR (`cache: 'no-store'`)
+- Data changes every few minutes → ISR (`revalidate: 60`)
+- Data rarely changes → SSG (`generateStaticParams`)
+
 ---
 
 ## Server Actions
 
-Server Actions let you run server-side code directly from a Client Component — no separate API route needed.
+Server Actions let you run server-side code directly from a Client Component — no separate API route needed. They're async functions marked with `'use server'` that can be called from the client.
+
+**Why this matters:** Before Server Actions, you needed a full API route to handle form submissions. Now you can write the server logic inline, and Next.js handles the network request automatically.
 
 ```tsx
 // app/actions/bookings.ts
@@ -493,6 +519,7 @@ import { createBooking } from '@/app/actions/bookings'
 
 export function BookingForm({ listingId }: { listingId: number }) {
   return (
+    // action prop accepts a Server Action — Next.js handles the network request
     <form action={createBooking}>
       <input type="hidden" name="listingId" value={listingId} />
       <input type="date" name="checkIn" />
@@ -507,7 +534,7 @@ export function BookingForm({ listingId }: { listingId: number }) {
 
 ## Next.js Image Optimization
 
-The `<Image>` component from Next.js automatically optimizes images: resizes, converts to WebP, lazy loads, and prevents layout shift.
+The `<Image>` component from Next.js automatically optimizes images: resizes them to the exact dimensions needed, converts to WebP (smaller than JPEG/PNG), lazy loads by default, and reserves space to prevent layout shift (CLS).
 
 ```tsx
 import Image from 'next/image'
@@ -521,7 +548,7 @@ function ListingCard({ listing }: { listing: Listing }) {
         width={400}
         height={260}
         className="card-img"
-        priority={false}   // set true for above-the-fold images
+        priority={false}   // set true for above-the-fold images (LCP element)
         placeholder="blur" // shows a blurred placeholder while loading
       />
       <h3>{listing.title}</h3>
@@ -530,7 +557,7 @@ function ListingCard({ listing }: { listing: Listing }) {
 }
 ```
 
-For external images, add the domain to `next.config.ts`:
+For external images, add the domain to `next.config.ts` — this prevents malicious image URLs from being processed:
 
 ```ts
 // next.config.ts
@@ -552,7 +579,7 @@ export default nextConfig
 
 ## API Routes
 
-Next.js API routes let you build a backend API in the same project as your frontend.
+Next.js API routes let you build a backend API in the same project as your frontend. They run on the server — you can access databases, call external APIs with secret keys, and handle auth.
 
 ```ts
 // app/api/listings/route.ts
@@ -560,6 +587,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
 // GET /api/listings
+// GET /api/listings?q=bali
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const query = searchParams.get('q') ?? ''
@@ -591,6 +619,10 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   return new NextResponse(null, { status: 204 })
 }
 ```
+
+**When to use API routes vs Server Actions:**
+- **API routes** — when you need a public API consumed by mobile apps, third parties, or other services
+- **Server Actions** — when the endpoint is only called from your own Next.js app (form submissions, mutations)
 
 ---
 
