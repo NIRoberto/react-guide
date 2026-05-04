@@ -16,7 +16,9 @@
 
 ## useEffect
 
-`useEffect` runs side effects after a component renders — data fetching, subscriptions, DOM manipulation, timers.
+`useEffect` runs side effects after a component renders. A **side effect** is anything that reaches outside the component — fetching data, setting up subscriptions, manipulating the DOM, starting timers.
+
+**Why after render?** React renders synchronously. If you fetched data during render, you'd block the UI. `useEffect` defers the work until after the browser has painted, keeping the UI responsive.
 
 ### Setup
 
@@ -28,6 +30,8 @@ npm run dev
 
 ### Dependency array patterns
 
+The second argument to `useEffect` is the **dependency array**. It controls when the effect re-runs.
+
 ```tsx
 // src/App.tsx
 import { useState, useEffect } from 'react'
@@ -38,22 +42,26 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true)
   const [query, setQuery] = useState<string>('')
 
-  // Runs ONCE on mount — empty dependency array []
+  // [] — runs ONCE on mount, never again
+  // Use for: initial data fetch, setting up subscriptions
   useEffect(() => {
-    // simulate a 1.5s API fetch
     const timer = setTimeout(() => {
       setListings(mockListings)
       setLoading(false)
     }, 1500)
 
-    // cleanup — runs when component unmounts
+    // cleanup — runs when component unmounts (or before the effect re-runs)
     return () => clearTimeout(timer)
   }, [])
 
-  // Runs every time 'query' changes
+  // [query] — runs on mount AND every time 'query' changes
+  // Use for: syncing with external systems when a value changes
   useEffect(() => {
     document.title = query ? `Search: ${query} | Airbnb` : 'Airbnb'
   }, [query])
+
+  // No array — runs after EVERY render (rarely what you want)
+  // useEffect(() => { ... })
 
   if (loading) return <p>Loading...</p>
 
@@ -63,13 +71,20 @@ export default function App() {
 
 ### Cleanup function
 
+The function returned from `useEffect` is the **cleanup function**. React calls it:
+- When the component unmounts (removed from the DOM)
+- Before the effect runs again (if dependencies changed)
+
+This prevents memory leaks and stale state updates.
+
 ```tsx
 useEffect(() => {
   let cancelled = false
 
   async function load() {
     const data = await fetchListings()
-    // guard against setting state on an unmounted component
+    // Without this guard, if the component unmounts while fetching,
+    // you'd try to call setState on an unmounted component
     if (!cancelled) setListings(data)
   }
 
@@ -78,7 +93,7 @@ useEffect(() => {
   return () => { cancelled = true }  // runs on unmount
 }, [])
 
-// timer cleanup
+// timer cleanup — without this, the interval keeps running after unmount
 useEffect(() => {
   const timer = setInterval(() => setTime(Date.now()), 1000)
   return () => clearInterval(timer)
@@ -91,11 +106,37 @@ npm run dev
 # watch the loading state appear for 1.5s then listings render
 ```
 
+### Common useEffect mistakes
+
+```tsx
+// MISTAKE 1: Missing dependency
+const [userId, setUserId] = useState(1)
+useEffect(() => {
+  fetchUser(userId)  // userId is used but not in the dependency array
+}, [])              // ESLint will warn about this
+
+// FIX: include all values used inside the effect
+useEffect(() => {
+  fetchUser(userId)
+}, [userId])
+
+// MISTAKE 2: Object/function in dependency array causes infinite loop
+useEffect(() => {
+  fetchData(options)
+}, [options])  // if options is created inline, it's a new object every render
+
+// FIX: move the object outside the component or use useMemo
+```
+
 ---
 
 ## useRef
 
-`useRef` holds a mutable value that persists across renders without causing re-renders. Two uses: DOM access and storing values that shouldn't trigger re-renders.
+`useRef` holds a mutable value that persists across renders **without causing re-renders**. It's a box that holds a value — changing the value doesn't trigger a re-render.
+
+Two main uses:
+1. **DOM access** — get a direct reference to a DOM element
+2. **Storing values** — hold values that shouldn't trigger re-renders (timers, previous values, flags)
 
 ### DOM access — auto-focus
 
@@ -109,16 +150,17 @@ interface SearchBarProps {
 }
 
 export function SearchBar({ value, onChange }: SearchBarProps) {
+  // inputRef.current will point to the actual <input> DOM element after mount
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // auto-focus on mount
   useEffect(() => {
+    // .current is null before mount, then holds the DOM element
     inputRef.current?.focus()
   }, [])
 
   return (
     <input
-      ref={inputRef}
+      ref={inputRef}  // React sets inputRef.current to this element after render
       type="text"
       value={value}
       onChange={e => onChange(e.target.value)}
@@ -130,12 +172,15 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
 
 ### Storing values without re-renders
 
+Use `useRef` when you need to remember a value between renders but don't want that value to trigger a re-render when it changes. Common for: timer IDs, previous prop values, whether the component has mounted.
+
 ```tsx
 // src/components/Timer.tsx
 import { useState, useRef } from 'react'
 
 export function Timer() {
   const [elapsed, setElapsed] = useState<number>(0)
+  // Storing the interval ID — changing it shouldn't re-render the component
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const start = (): void => {
@@ -156,11 +201,22 @@ export function Timer() {
 }
 ```
 
+**Key difference from useState:** `ref.current = newValue` does NOT trigger a re-render. `setState(newValue)` DOES. Use `useRef` when you need to remember something but the UI doesn't depend on it.
+
 ---
 
 ## useContext
 
-`useContext` reads a value from the nearest Context Provider above it in the tree. Solves **prop drilling** — passing props through many layers just to reach a deeply nested component.
+`useContext` reads a value from the nearest Context Provider above it in the tree. It solves **prop drilling** — the problem of passing props through many layers of components just to reach a deeply nested one.
+
+**The problem prop drilling causes:**
+```
+App (has savedIds state)
+  └── ListingsPage (passes savedIds down)
+        └── ListingsGrid (passes savedIds down)
+              └── ListingCard (finally uses savedIds)
+```
+`ListingsPage` and `ListingsGrid` don't need `savedIds` — they're just passing it through. Context eliminates this.
 
 ### Full example
 
@@ -174,6 +230,8 @@ interface FavoritesContextType {
   count: number
 }
 
+// Default value is used when a component reads context outside a Provider
+// In practice, this should never happen — the error in the custom hook catches it
 const FavoritesContext = createContext<FavoritesContextType>({
   saved: [],
   toggle: () => {},
@@ -189,13 +247,15 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
     )
 
   return (
+    // All components inside this Provider can read { saved, toggle, count }
     <FavoritesContext.Provider value={{ saved, toggle, count: saved.length }}>
       {children}
     </FavoritesContext.Provider>
   )
 }
 
-// custom hook — always use this instead of useContext directly
+// Always expose context through a custom hook — never useContext directly
+// This lets you add validation and keeps the context name out of consumer components
 export function useFavorites(): FavoritesContextType {
   return useContext(FavoritesContext)
 }
@@ -239,11 +299,28 @@ npm run dev
 # click hearts — SavedCount updates without any prop passing
 ```
 
+### When NOT to use Context
+
+Context is not a replacement for all state. Use it for:
+- Theme (dark/light mode)
+- Auth state (current user)
+- Language/locale
+- Shared UI state (favorites, cart)
+
+Don't use it for state that only one or two components need — just pass props. Context re-renders every subscriber when the value changes, which can hurt performance if overused.
+
 ---
 
 ## useReducer
 
-`useReducer` manages complex state with multiple related values. Better than multiple `useState` calls when state updates are interconnected.
+`useReducer` manages complex state with multiple related values. It's an alternative to multiple `useState` calls when state updates are interconnected or when the next state depends on the previous in complex ways.
+
+**Mental model:** Think of it like a Redux store in miniature. You dispatch **actions** (plain objects describing what happened), and a **reducer** function (pure function) computes the next state.
+
+**When to prefer `useReducer` over `useState`:**
+- Multiple state values that change together
+- Next state depends on previous state in complex ways
+- State transitions have names (makes code self-documenting)
 
 ```tsx
 // src/store/reducer.ts
@@ -256,12 +333,14 @@ export type State = {
   saved: number[]
 }
 
+// Discriminated union — TypeScript knows exactly which payload type goes with each action
 export type Action =
   | { type: 'SET_LISTINGS'; payload: Listing[] }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_FILTER'; payload: string }
   | { type: 'TOGGLE_FAVORITE'; payload: number }
 
+// Pure function — same inputs always produce same output, no side effects
 export function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_LISTINGS':
@@ -319,13 +398,17 @@ export default function App() {
 }
 ```
 
+**Benefit of named actions:** When you read `dispatch({ type: 'TOGGLE_FAVORITE', payload: id })`, you immediately understand what's happening. Compare to `setSaved(prev => prev.includes(id) ? ...)` — the intent is less clear.
+
 ---
 
 ## useMemo & useCallback
 
-Both memoize values to avoid unnecessary recalculations or re-renders.
+Both hooks memoize values to avoid unnecessary recalculations or re-renders. They are **performance optimizations** — only add them when you have a measured performance problem.
 
 ### useMemo — expensive computations
+
+`useMemo` caches the result of a computation. It only recalculates when its dependencies change.
 
 ```tsx
 import { useMemo } from 'react'
@@ -338,7 +421,8 @@ interface Props {
 }
 
 function ListingsPage({ listings, query, maxPrice }: Props) {
-  // recalculates ONLY when listings, query, or maxPrice changes
+  // Without useMemo: this filter runs on EVERY render, even if listings/query/maxPrice didn't change
+  // With useMemo: only recalculates when listings, query, or maxPrice changes
   const filtered = useMemo<Listing[]>(() =>
     listings.filter(l =>
       l.title.toLowerCase().includes(query.toLowerCase()) &&
@@ -355,7 +439,11 @@ function ListingsPage({ listings, query, maxPrice }: Props) {
 }
 ```
 
+**When to use:** Only when the computation is genuinely expensive (sorting/filtering thousands of items, complex math). For simple filters on small arrays, `useMemo` adds overhead without benefit.
+
 ### useCallback — stable function references
+
+`useCallback` caches a function so its reference stays the same between renders. This matters because functions are recreated on every render — a new reference means `React.memo` children will re-render even if the logic is identical.
 
 ```tsx
 import { useCallback, useState } from 'react'
@@ -363,12 +451,16 @@ import { useCallback, useState } from 'react'
 function ListingsPage() {
   const [saved, setSaved] = useState<number[]>([])
 
-  // stable reference — won't cause React.memo children to re-render
+  // Without useCallback — new function reference on every render
+  // This breaks React.memo because onToggle "changes" every render
+  // const handleToggle = (id: number) => setSaved(...)  // BAD
+
+  // With useCallback — stable reference, React.memo works correctly
   const handleToggle = useCallback((id: number): void => {
     setSaved(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     )
-  }, [])
+  }, [])  // no dependencies — setSaved is stable
 
   return (
     <div>
@@ -380,11 +472,18 @@ function ListingsPage() {
 }
 ```
 
+**Rule of thumb:** Use `useCallback` when passing a function to a `React.memo`-wrapped child. Otherwise, it's premature optimization.
+
 ---
 
 ## Custom Hooks
 
-A custom hook is a function that starts with `use` and calls other hooks. Extracts and reuses stateful logic.
+A custom hook is a function that starts with `use` and calls other hooks. It extracts stateful logic out of components so it can be reused and tested independently.
+
+**Why custom hooks?**
+- Components stay clean — they describe UI, not logic
+- Logic can be reused across multiple components
+- Logic can be tested in isolation
 
 ```tsx
 // src/hooks/useListings.ts
@@ -488,7 +587,7 @@ npm run dev
 
 ## CSS Modules
 
-CSS Modules scope styles to a single component — `.card` here won't clash with `.card` anywhere else.
+CSS Modules scope styles to a single component — `.card` here won't clash with `.card` anywhere else in the app. Vite compiles each class name to a unique identifier like `ListingCard_card__x7k2p`.
 
 ### Setup
 
@@ -547,6 +646,7 @@ interface ListingCardProps {
 
 export function ListingCard({ listing, saved, onToggleSave }: ListingCardProps) {
   return (
+    // styles.card compiles to something like "ListingCard_card__x7k2p"
     <div className={styles.card}>
       <img src={listing.img} alt={listing.title} className={styles.image} />
       <div className={styles.body}>
@@ -560,11 +660,22 @@ export function ListingCard({ listing, saved, onToggleSave }: ListingCardProps) 
 }
 ```
 
+**Why CSS Modules over plain CSS?**
+- No class name collisions — `.card` in one module never affects `.card` in another
+- Dead code elimination — unused styles are removed at build time
+- Explicit imports — you can see exactly which styles a component uses
+
 ---
 
 ## Tailwind CSS
 
-Utility-first CSS — compose styles using class names directly in JSX.
+Utility-first CSS — compose styles using small, single-purpose class names directly in JSX. Instead of writing `.card { border-radius: 12px; overflow: hidden; }`, you write `className="rounded-xl overflow-hidden"`.
+
+**Why Tailwind?**
+- No context switching between JSX and CSS files
+- No naming things — no more `.card-wrapper-inner-container`
+- Consistent design system — spacing, colors, and sizes come from a predefined scale
+- Unused styles are automatically removed at build time (tiny CSS bundle)
 
 ### Setup
 
@@ -629,18 +740,28 @@ npm run dev
 
 ## className Conditionals
 
+Applying classes conditionally is a common pattern. There are several approaches — `clsx` is the most readable for complex cases.
+
 ```tsx
-// Method 1: template literal
+// Method 1: template literal — simple cases
 <div className={`card ${isActive ? 'card--active' : ''}`}>
 
-// Method 2: array join
-<div className={['card', isActive && 'card--active'].filter(Boolean).join(' ')}>
+// Method 2: array join — multiple conditionals
+<div className={['card', isActive && 'card--active', featured && 'card--featured'].filter(Boolean).join(' ')}>
 
-// Method 3: clsx (recommended)
+// Method 3: clsx (recommended for complex cases)
 // npm install clsx
 import clsx from 'clsx'
-<div className={clsx('card', { 'card--active': isActive, 'card--featured': superhost })}>
+
+<div className={clsx(
+  'card',
+  { 'card--active': isActive },
+  { 'card--featured': superhost },
+  price > 300 && 'card--luxury'
+)}>
 ```
+
+`clsx` handles all the edge cases — it ignores `false`, `null`, and `undefined` values, so you never get stray spaces or empty class names.
 
 ---
 
