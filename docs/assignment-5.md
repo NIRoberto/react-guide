@@ -9,8 +9,7 @@ Refactor your Airbnb app using Higher-Order Components, compound components, the
 ## Setup
 
 ```bash
-cp -r assignment-4 assignment-5
-cd assignment-5
+cd airbnb-app
 npm install
 npm run dev
 ```
@@ -323,7 +322,7 @@ export default function Home() {
 ## Run the Assignment
 
 ```bash
-cd assignment-5
+cd airbnb-app
 npm install
 npm run dev
 npm run build   # verify all TypeScript

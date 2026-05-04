@@ -9,8 +9,7 @@ Build a multi-page Airbnb app with React Router v6, a Zustand global store, `Rea
 ## Setup
 
 ```bash
-cp -r assignment-2 assignment-3
-cd assignment-3
+cd airbnb-app
 npm install react-router-dom zustand react-window
 npm install -D @types/react-window
 npm run dev
@@ -229,7 +228,7 @@ export default function ListingDetail() {
 ## Run the Assignment
 
 ```bash
-cd assignment-3
+cd airbnb-app
 npm install
 npm run dev
 # open http://localhost:5173

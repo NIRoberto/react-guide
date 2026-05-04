@@ -9,8 +9,8 @@ Build a fully static Airbnb listings page using TypeScript, React components, pr
 ## Setup
 
 ```bash
-npm create vite@latest assignment-1 -- --template react-ts
-cd assignment-1
+npm create vite@latest airbnb-app -- --template react-ts
+cd airbnb-app
 npm install
 npm run dev
 ```
@@ -195,7 +195,7 @@ export default function App() {
 ## Run the Assignment
 
 ```bash
-cd assignment-1
+cd airbnb-app
 npm install
 npm run dev
 # open http://localhost:5173

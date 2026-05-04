@@ -9,9 +9,8 @@ Refactor your Phase 1 listings page to use core React hooks, Context, `useReduce
 ## Setup
 
 ```bash
-# continue from assignment-1 or start fresh
-cp -r assignment-1 assignment-2
-cd assignment-2
+# continue from Phase 1 — same project
+cd airbnb-app
 npm install
 npm run dev
 ```
@@ -212,7 +211,7 @@ export function SavedListings() {
 ## Run the Assignment
 
 ```bash
-cd assignment-2
+cd airbnb-app
 npm install
 npm run dev
 # open http://localhost:5173

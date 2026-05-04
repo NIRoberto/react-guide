@@ -11,21 +11,20 @@ Prepare your Airbnb app for production deployment and migrate the listings page 
 ### Part A — Production-ready Vite app
 
 ```bash
-cp -r assignment-5 assignment-6-vite
-cd assignment-6-vite
+cd airbnb-app
 npm install
 ```
 
 ### Part B — New Next.js project
 
 ```bash
-npx create-next-app@latest assignment-6-nextjs \
+npx create-next-app@latest airbnb-app-next \
   --typescript \
   --tailwind \
   --app \
   --no-src-dir \
   --import-alias "@/*"
-cd assignment-6-nextjs
+cd airbnb-app-next
 npm run dev
 ```
 
@@ -38,11 +37,11 @@ Open [http://localhost:3000](http://localhost:3000)
 ### Part A — Vite app
 
 ```
-assignment-6-vite/
+airbnb-app/
 ├── src/
 │   ├── config/
 │   │   └── env.ts              # centralised env var access
-│   └── ...                     # all files from assignment-5
+│   └── ...                     # all files from Phase 5
 ├── .env.local                  # development env vars
 ├── .env.production             # production env vars
 ├── vercel.json                 # SPA rewrite rule
@@ -54,7 +53,7 @@ assignment-6-vite/
 ### Part B — Next.js app
 
 ```
-assignment-6-nextjs/
+airbnb-app-next/
 ├── app/
 │   ├── layout.tsx              # root layout
 │   ├── page.tsx                # / — home (Server Component)
@@ -376,7 +375,7 @@ export default nextConfig
 ### Part A
 
 ```bash
-cd assignment-6-vite
+cd airbnb-app
 npm run build          # verify production build
 npm run preview        # test production build locally
 ```
@@ -384,7 +383,7 @@ npm run preview        # test production build locally
 ### Part B
 
 ```bash
-cd assignment-6-nextjs
+cd airbnb-app-next
 npm run dev            # http://localhost:3000
 npm run build          # verify Next.js build
 ```

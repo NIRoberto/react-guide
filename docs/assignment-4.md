@@ -9,8 +9,7 @@ Build a full booking flow with TanStack Query for cached data fetching, a valida
 ## Setup
 
 ```bash
-cp -r assignment-3 assignment-4
-cd assignment-4
+cd airbnb-app
 npm install @tanstack/react-query
 npm install -D vitest @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
 npm run dev
@@ -316,7 +315,7 @@ describe('ListingCard', () => {
 ## Run the Assignment
 
 ```bash
-cd assignment-4
+cd airbnb-app
 npm install
 npm run dev          # run the app
 npm test             # run tests in watch mode
