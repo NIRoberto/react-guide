@@ -69,7 +69,7 @@ export default function App() {
   const [currentLesson, setCurrentLesson] = useState(1)
   const [completedLessons, setCompletedLessons] = useState<number[]>([])
   const [collapsedPhases, setCollapsedPhases] = useState<number[]>([])
-  const [dark, setDark] = useState(true)
+  const [dark, setDark] = useState(false)
   const [courseComplete, setCourseComplete] = useState(false)
   const contentRef = useRef<HTMLElement>(null)
 
