@@ -10,7 +10,7 @@
 7. [Nested Routes & Outlet](#nested-routes--outlet)
 8. [Lazy Loading with React.lazy](#lazy-loading-with-reactlazy)
 9. [Global State Management](#global-state-management)
-10. [Zustand](#zustand)
+10. [Context API + useReducer](#context-api--usereducer)
 11. [React.memo](#reactmemo)
 12. [Virtualization](#virtualization)
 13. [Assignment](#assignment)
@@ -313,102 +313,192 @@ function App() {
 
 As your app grows, passing state through props becomes unwieldy. Global state management lets any component read or update shared state without prop drilling.
 
-### Options
+The built-in solution is **Context API + useReducer** — zero dependencies, ships with React, and is the right tool for most apps.
 
-| Library | Bundle Size | Learning Curve | Best For |
-|---------|-------------|----------------|----------|
-| Context + useReducer | 0kb (built-in) | Low | Small-medium apps |
-| Zustand | ~1kb | Very low | Most apps |
-| Redux Toolkit | ~15kb | Medium | Large teams, complex state |
-| Jotai | ~3kb | Low | Atomic state |
-
-**Why not just use Context for everything?** Context re-renders every subscriber when the value changes. If you put all your state in one context, every component that reads any part of it re-renders on every state change. Zustand solves this with fine-grained subscriptions.
+**The problem it solves:**
+```
+App (has filter, saved, listings state)
+  └── ListingsPage (passes everything down)
+        └── ListingsGrid (passes everything down)
+              └── ListingCard (finally uses saved + toggleSaved)
+```
+With Context, `ListingCard` reads directly from the store — no middlemen.
 
 ---
 
-## Zustand
+## Context API + useReducer
 
-Zustand is a minimal global state library. You define a store with state and actions. Any component subscribes to the **exact slice** it needs — it only re-renders when that slice changes.
+The pattern combines two built-in hooks:
+- `useReducer` — manages the state and all the ways it can change (the store)
+- `createContext` + `useContext` — makes that state available to any component in the tree
 
-```bash
-npm install zustand
-```
+### Step 1 — Define state shape and actions
 
 ```ts
-// src/store/useStore.ts
-import { create } from 'zustand'
+// src/store/types.ts
+import type { Listing } from '../types'
 
-interface StoreState {
-  // State
+export type State = {
   listings: Listing[]
   loading: boolean
   filter: string
   saved: number[]
-  // Actions — functions that update state
-  setListings: (listings: Listing[]) => void
-  setLoading: (loading: boolean) => void
-  setFilter: (filter: string) => void
-  toggleSaved: (id: number) => void
-  reset: () => void
 }
 
-export const useStore = create<StoreState>((set) => ({
+// Discriminated union — each action type has a specific payload
+export type Action =
+  | { type: 'SET_LISTINGS'; payload: Listing[] }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_FILTER'; payload: string }
+  | { type: 'TOGGLE_SAVED'; payload: number }
+  | { type: 'RESET' }
+
+export const initialState: State = {
   listings: [],
   loading: true,
   filter: '',
   saved: [],
-
-  setListings: (listings) => set({ listings }),
-  setLoading: (loading) => set({ loading }),
-  setFilter: (filter) => set({ filter }),
-
-  // set receives the current state — use it for updates that depend on previous state
-  toggleSaved: (id) => set((state) => ({
-    saved: state.saved.includes(id)
-      ? state.saved.filter(x => x !== id)
-      : [...state.saved, id],
-  })),
-
-  reset: () => set({ filter: '', saved: [] }),
-}))
+}
 ```
 
+### Step 2 — Write the reducer
+
+```ts
+// src/store/reducer.ts
+import type { State, Action } from './types'
+
+export function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'SET_LISTINGS':
+      return { ...state, listings: action.payload }
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload }
+    case 'SET_FILTER':
+      return { ...state, filter: action.payload }
+    case 'TOGGLE_SAVED':
+      return {
+        ...state,
+        saved: state.saved.includes(action.payload)
+          ? state.saved.filter(id => id !== action.payload)
+          : [...state.saved, action.payload],
+      }
+    case 'RESET':
+      return { ...state, filter: '', saved: [] }
+    default:
+      return state
+  }
+}
+```
+
+### Step 3 — Create the context and provider
+
 ```tsx
-// Any component — subscribe to only the slice you need
+// src/store/StoreContext.tsx
+import { createContext, useContext, useReducer } from 'react'
+import { reducer, initialState } from './reducer'
+import type { State, Action } from './types'
+
+interface StoreContextType {
+  state: State
+  dispatch: React.Dispatch<Action>
+}
+
+const StoreContext = createContext<StoreContextType | null>(null)
+
+export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const [state, dispatch] = useReducer(reducer, initialState)
+
+  return (
+    <StoreContext.Provider value={{ state, dispatch }}>
+      {children}
+    </StoreContext.Provider>
+  )
+}
+
+// Always expose context through a custom hook — never useContext directly
+export function useStore(): StoreContextType {
+  const ctx = useContext(StoreContext)
+  if (!ctx) throw new Error('useStore must be used inside StoreProvider')
+  return ctx
+}
+```
+
+### Step 4 — Wrap the app
+
+```tsx
+// main.tsx
+import { StoreProvider } from './store/StoreContext'
+
+createRoot(document.getElementById('root')!).render(
+  <BrowserRouter>
+    <StoreProvider>
+      <App />
+    </StoreProvider>
+  </BrowserRouter>
+)
+```
+
+### Step 5 — Use in any component
+
+```tsx
+// SearchBar — reads filter, dispatches SET_FILTER
 function SearchBar() {
-  // This component ONLY re-renders when filter changes
-  // It does NOT re-render when listings, loading, or saved changes
-  const filter = useStore(state => state.filter)
-  const setFilter = useStore(state => state.setFilter)
+  const { state, dispatch } = useStore()
 
   return (
     <input
-      value={filter}
-      onChange={e => setFilter(e.target.value)}
+      value={state.filter}
+      onChange={e => dispatch({ type: 'SET_FILTER', payload: e.target.value })}
       placeholder="Search listings..."
     />
   )
 }
 
+// SavedCount — reads saved array length
 function SavedCount() {
-  // Only re-renders when saved array changes
-  const count = useStore(state => state.saved.length)
-  return <span>{count} saved</span>
+  const { state } = useStore()
+  return <span>{state.saved.length} saved</span>
 }
 
+// ListingCard — reads saved, dispatches TOGGLE_SAVED
 function ListingCard({ id }: { id: number }) {
-  const saved = useStore(state => state.saved)
-  const toggleSaved = useStore(state => state.toggleSaved)
+  const { state, dispatch } = useStore()
+  const isSaved = state.saved.includes(id)
 
   return (
-    <button onClick={() => toggleSaved(id)}>
-      {saved.includes(id) ? 'Unsave' : 'Save'}
+    <button onClick={() => dispatch({ type: 'TOGGLE_SAVED', payload: id })}>
+      {isSaved ? 'Unsave' : 'Save'}
     </button>
+  )
+}
+
+// Home page — loads listings on mount, reads from store
+function Home() {
+  const { state, dispatch } = useStore()
+
+  useEffect(() => {
+    dispatch({ type: 'SET_LOADING', payload: true })
+    fetchListings().then(data => {
+      dispatch({ type: 'SET_LISTINGS', payload: data })
+      dispatch({ type: 'SET_LOADING', payload: false })
+    })
+  }, [])
+
+  const filtered = state.listings.filter(l =>
+    l.title.toLowerCase().includes(state.filter.toLowerCase())
+  )
+
+  if (state.loading) return <Spinner />
+
+  return (
+    <div className="grid">
+      {filtered.map(l => <ListingCard key={l.id} id={l.id} />)}
+    </div>
   )
 }
 ```
 
-**Key insight:** The selector function `state => state.filter` is what makes Zustand efficient. The component only subscribes to the specific value it selects — not the entire store.
+**Why this works well:** Every component that calls `useStore()` re-renders when `state` changes. For most apps this is fine — the components that read from the store are the ones that should update. If you later need fine-grained subscriptions, you can split into multiple contexts (one for listings, one for UI state).
 
 ---
 
@@ -517,13 +607,14 @@ function VirtualListings() {
 
 > See **[assignment-3.md](./assignment-3.md)** for the full description, file structure, acceptance criteria, and submission checklist.
 
-**Summary:** Build a multi-page Airbnb app with React Router v6, a Zustand global store, `React.memo` optimization, and a virtualized list of 50 items.
+**Summary:** Build a multi-page Airbnb app with React Router v6, a Context API + useReducer global store, `React.memo` optimization, and a virtualized list of 50 items.
 
 ---
 
 **Resources**
 - [React Router v6 Docs](https://reactrouter.com/en/main)
-- [Zustand Docs](https://zustand-demo.pmnd.rs)
+- [React Docs — createContext](https://react.dev/reference/react/createContext)
+- [React Docs — useReducer](https://react.dev/reference/react/useReducer)
 - [React Docs — lazy](https://react.dev/reference/react/lazy)
 - [React Docs — memo](https://react.dev/reference/react/memo)
 - [react-window Docs](https://react-window.vercel.app)

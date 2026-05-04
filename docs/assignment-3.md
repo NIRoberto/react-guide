@@ -2,7 +2,7 @@
 
 ## Description
 
-Build a multi-page Airbnb app with React Router v6, a Zustand global store, `React.memo` optimization, and a virtualized listings list. The app must have working navigation, protected routes, lazy loading, and a global store that powers filter and saved state across all pages.
+Build a multi-page Airbnb app with React Router v6, a Context API + useReducer global store, `React.memo` optimization, and a virtualized listings list. The app must have working navigation, protected routes, lazy loading, and a global store that powers filter and saved state across all pages.
 
 ---
 
@@ -10,7 +10,7 @@ Build a multi-page Airbnb app with React Router v6, a Zustand global store, `Rea
 
 ```bash
 cd airbnb-app
-npm install react-router-dom zustand react-window
+npm install react-router-dom react-window
 npm install -D @types/react-window
 npm run dev
 ```
@@ -34,11 +34,11 @@ src/
 │   ├── Dashboard.tsx             # protected page
 │   └── NotFound.tsx              # 404
 ├── store/
-│   └── useStore.ts               # Zustand store
+│   ├── types.ts                  # State, Action types
+│   ├── reducer.ts                # reducer function
+│   └── StoreContext.tsx          # context, provider, useStore hook
 ├── context/
 │   └── AuthContext.tsx           # auth state
-├── hooks/
-│   └── useListings.ts
 ├── data/
 │   └── listings.ts
 ├── types/
@@ -52,51 +52,111 @@ src/
 ## Tasks
 
 1. Install `react-router-dom` and wrap `<App />` in `<BrowserRouter>` in `main.tsx`
-2. Create `src/store/useStore.ts` — Zustand store with `listings`, `filter`, `saved`, `setListings`, `setFilter`, `toggleSaved`, `reset`
-3. Create `src/pages/Home.tsx` — listings grid, reads `filter` and `saved` from store
-4. Create `src/pages/ListingDetail.tsx` — uses `useParams` to find listing by ID, shows full detail
-5. Create `src/pages/Login.tsx` — email + password form, calls `login()` from `AuthContext`
-6. Create `src/pages/Dashboard.tsx` — shows user info, only accessible when authenticated
-7. Create `src/pages/NotFound.tsx` — 404 page
-8. Create `src/components/Navbar.tsx` — `NavLink` for Home and Dashboard, active styling
-9. Create `src/components/ProtectedRoute.tsx` — redirects to `/login` if not authenticated
-10. Create `src/context/AuthContext.tsx` — `AuthProvider` with `login`, `logout`, `isAuthenticated`
-11. Lazy load `ListingDetail` and `Dashboard` with `React.lazy` + `Suspense`
-12. Wrap `ListingCard` with `React.memo`, wrap toggle handler with `useCallback`
-13. Add a virtualized list of 50 listings on the Home page using `react-window`
-14. Add a 404 catch-all route
+2. Create `src/store/types.ts` — define `State`, `Action` union type, and `initialState`
+3. Create `src/store/reducer.ts` — pure reducer function with cases: `SET_LISTINGS`, `SET_LOADING`, `SET_FILTER`, `TOGGLE_SAVED`, `RESET`
+4. Create `src/store/StoreContext.tsx` — `StoreProvider` wraps the app, `useStore` hook exposes `state` and `dispatch`
+5. Wrap `<App />` in `<StoreProvider>` inside `main.tsx`
+6. Create `src/pages/Home.tsx` — listings grid, reads `filter` and `saved` from store via `useStore`
+7. Create `src/pages/ListingDetail.tsx` — uses `useParams` to find listing by ID, shows full detail
+8. Create `src/pages/Login.tsx` — email + password form, calls `login()` from `AuthContext`
+9. Create `src/pages/Dashboard.tsx` — shows user info, only accessible when authenticated
+10. Create `src/pages/NotFound.tsx` — 404 page
+11. Create `src/components/Navbar.tsx` — `NavLink` for Home and Dashboard, active styling
+12. Create `src/components/ProtectedRoute.tsx` — redirects to `/login` if not authenticated
+13. Create `src/context/AuthContext.tsx` — `AuthProvider` with `login`, `logout`, `isAuthenticated`
+14. Lazy load `ListingDetail` and `Dashboard` with `React.lazy` + `Suspense`
+15. Wrap `ListingCard` with `React.memo`, wrap toggle handler with `useCallback`
+16. Add a virtualized list of 50 listings on the Home page using `react-window`
+17. Add a 404 catch-all route
 
 ---
 
 ## Starter Code
 
-### `src/store/useStore.ts`
+### `src/store/types.ts`
 
 ```ts
-import { create } from 'zustand'
 import type { Listing } from '../types'
 
-interface StoreState {
+export type State = {
   listings: Listing[]
+  loading: boolean
   filter: string
   saved: number[]
-  setListings: (listings: Listing[]) => void
-  setFilter: (filter: string) => void
-  toggleSaved: (id: number) => void
-  reset: () => void
 }
 
-export const useStore = create<StoreState>((set) => ({
+export type Action =
+  | { type: 'SET_LISTINGS'; payload: Listing[] }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_FILTER'; payload: string }
+  | { type: 'TOGGLE_SAVED'; payload: number }
+  | { type: 'RESET' }
+
+export const initialState: State = {
   listings: [],
+  loading: true,
   filter: '',
   saved: [],
-  setListings: (listings) => set({ listings }),
-  setFilter: (filter) => set({ filter }),
-  toggleSaved: (id) => set((state) => ({
-    // TODO: add or remove id from saved array
-  })),
-  reset: () => set({ filter: '', saved: [] }),
-}))
+}
+```
+
+### `src/store/reducer.ts`
+
+```ts
+import type { State, Action } from './types'
+
+export function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'SET_LISTINGS':
+      return { ...state, listings: action.payload }
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload }
+    case 'SET_FILTER':
+      return { ...state, filter: action.payload }
+    case 'TOGGLE_SAVED':
+      return {
+        ...state,
+        saved: state.saved.includes(action.payload)
+          ? state.saved.filter(id => id !== action.payload)
+          : [...state.saved, action.payload],
+      }
+    case 'RESET':
+      return { ...state, filter: '', saved: [] }
+    default:
+      return state
+  }
+}
+```
+
+### `src/store/StoreContext.tsx`
+
+```tsx
+import { createContext, useContext, useReducer } from 'react'
+import { reducer, initialState } from './reducer'
+import type { State, Action } from './types'
+
+interface StoreContextType {
+  state: State
+  dispatch: React.Dispatch<Action>
+}
+
+const StoreContext = createContext<StoreContextType | null>(null)
+
+export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const [state, dispatch] = useReducer(reducer, initialState)
+
+  return (
+    <StoreContext.Provider value={{ state, dispatch }}>
+      {children}
+    </StoreContext.Provider>
+  )
+}
+
+export function useStore(): StoreContextType {
+  const ctx = useContext(StoreContext)
+  if (!ctx) throw new Error('useStore must be used inside StoreProvider')
+  return ctx
+}
 ```
 
 ### `src/context/AuthContext.tsx`
@@ -202,13 +262,13 @@ export default function App() {
 
 ```tsx
 import { useParams, useNavigate } from 'react-router-dom'
-import { useStore } from '../store/useStore'
+import { useStore } from '../store/StoreContext'
 
 export default function ListingDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const listings = useStore(s => s.listings)
-  const listing = listings.find(l => l.id === Number(id))
+  const { state } = useStore()
+  const listing = state.listings.find(l => l.id === Number(id))
 
   if (!listing) return <p>Listing not found</p>
 
@@ -242,28 +302,29 @@ npm run dev
 | # | Criteria | How to verify |
 |---|----------|---------------|
 | 1 | `BrowserRouter` wraps the app in `main.tsx` | App renders without router errors |
-| 2 | Zustand store has all 6 fields and actions typed correctly | `npm run build` passes |
-| 3 | Home page renders listings grid from store | Listings visible at `/` |
-| 4 | Clicking a listing navigates to `/listings/:id` | URL changes, detail page shows correct listing |
-| 5 | `useParams` extracts the correct ID on detail page | Detail page shows the right listing title |
-| 6 | `/dashboard` redirects to `/login` when not authenticated | Visit `/dashboard` — redirected to `/login` |
-| 7 | Login form calls `login()` and grants access to Dashboard | Submit login form — Dashboard accessible |
-| 8 | `NavLink` shows active styling on current route | Active link visually distinct |
-| 9 | `ListingDetail` and `Dashboard` lazy load with spinner | Network tab shows separate JS chunks |
-| 10 | `ListingCard` wrapped with `React.memo` | React DevTools Profiler — card doesn't re-render on unrelated state changes |
-| 11 | Toggle handler wrapped with `useCallback` | Stable reference — memo works correctly |
-| 12 | Virtualized list of 50 items renders only visible rows | Scroll list — DOM has ~10 rows, not 50 |
-| 13 | 404 page shows for unknown routes | Visit `/unknown` — NotFound page renders |
-| 14 | No TypeScript errors | `npm run build` completes cleanly |
+| 2 | `StoreProvider` wraps the app in `main.tsx` | App renders without context errors |
+| 3 | `reducer.ts` handles all 5 action types with no TypeScript errors | `npm run build` passes |
+| 4 | Home page renders listings grid from store | Listings visible at `/` |
+| 5 | Clicking a listing navigates to `/listings/:id` | URL changes, detail page shows correct listing |
+| 6 | `useParams` extracts the correct ID on detail page | Detail page shows the right listing title |
+| 7 | `/dashboard` redirects to `/login` when not authenticated | Visit `/dashboard` — redirected to `/login` |
+| 8 | Login form calls `login()` and grants access to Dashboard | Submit login form — Dashboard accessible |
+| 9 | `NavLink` shows active styling on current route | Active link visually distinct |
+| 10 | `ListingDetail` and `Dashboard` lazy load with spinner | Network tab shows separate JS chunks |
+| 11 | `ListingCard` wrapped with `React.memo` | React DevTools Profiler — card doesn't re-render on unrelated state changes |
+| 12 | Toggle handler wrapped with `useCallback` | Stable reference — memo works correctly |
+| 13 | Virtualized list of 50 items renders only visible rows | Scroll list — DOM has ~10 rows, not 50 |
+| 14 | 404 page shows for unknown routes | Visit `/unknown` — NotFound page renders |
+| 15 | No TypeScript errors | `npm run build` completes cleanly |
 
 ---
 
 ## Submission Checklist
 
-- [ ] All 14 acceptance criteria pass
+- [ ] All 15 acceptance criteria pass
 - [ ] `npm run build` completes with zero errors
 - [ ] Navigation works across all 4 pages
 - [ ] Protected route redirects correctly
 - [ ] Lazy loading confirmed in Network tab
-- [ ] Zustand store powers filter and saved state on all pages
+- [ ] Context store powers filter and saved state on all pages
 - [ ] Virtualized list scrolls smoothly with 50 items
