@@ -13,23 +13,25 @@
 10. [Zustand](#zustand)
 11. [React.memo](#reactmemo)
 12. [Virtualization](#virtualization)
-13. [Assignment — Multi-Page Airbnb App with Global State](#assignment--multi-page-airbnb-app-with-global-state)
+13. [Assignment](#assignment)
 
 ---
 
 ## Client-Side Routing
 
-In a traditional website, every URL change triggers a full page reload — the browser requests a new HTML file from the server. In a React SPA (Single Page Application), there is only one HTML file. React Router intercepts URL changes and swaps out components without reloading the page.
+In a traditional website, every URL change triggers a full page reload — the browser requests a new HTML file from the server. In a React SPA (Single Page Application), there is only **one HTML file**. React Router intercepts URL changes and swaps out components without reloading the page.
 
 ```
 Traditional:
-  /listings     → server sends listings.html
-  /listings/3   → server sends detail.html (full reload)
+  /listings     → server sends listings.html (full reload, ~500ms)
+  /listings/3   → server sends detail.html   (full reload, ~500ms)
 
 React Router:
-  /listings     → React renders <ListingsPage />
-  /listings/3   → React renders <ListingDetail /> (no reload, instant)
+  /listings     → React renders <ListingsPage />  (instant)
+  /listings/3   → React renders <ListingDetail /> (instant, no reload)
 ```
+
+**How it works under the hood:** React Router uses the browser's History API (`pushState`, `replaceState`) to change the URL without triggering a page reload. It listens for URL changes and re-renders the matching component.
 
 **Analogy:** Like changing TV channels — the TV stays on, only the content changes.
 
@@ -41,7 +43,7 @@ React Router:
 npm install react-router-dom
 ```
 
-Wrap your entire app in `BrowserRouter` in `main.tsx`:
+Wrap your entire app in `BrowserRouter` in `main.tsx`. This provides the routing context that all React Router hooks and components need.
 
 ```tsx
 // main.tsx
@@ -58,6 +60,8 @@ createRoot(document.getElementById('root')!).render(
 
 ## Routes & Navigation
 
+`Routes` renders the first `Route` that matches the current URL. `Link` and `NavLink` render anchor tags that use the History API instead of triggering a page reload.
+
 ```tsx
 // App.tsx
 import { Routes, Route, Link, NavLink } from 'react-router-dom'
@@ -66,10 +70,10 @@ function App() {
   return (
     <div>
       <nav>
-        {/* Link — basic navigation */}
+        {/* Link — basic navigation, no active styling */}
         <Link to="/">Home</Link>
 
-        {/* NavLink — adds 'active' class automatically when route matches */}
+        {/* NavLink — automatically receives an 'active' class when the route matches */}
         <NavLink
           to="/listings"
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
@@ -83,6 +87,7 @@ function App() {
       </nav>
 
       <Routes>
+        {/* Routes are matched top-to-bottom — more specific routes first */}
         <Route path="/" element={<Home />} />
         <Route path="/listings" element={<ListingsPage />} />
         <Route path="/listings/:id" element={<ListingDetail />} />
@@ -92,7 +97,7 @@ function App() {
             <Dashboard />
           </ProtectedRoute>
         } />
-        {/* 404 catch-all */}
+        {/* 404 catch-all — matches any URL not matched above */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>
@@ -100,26 +105,31 @@ function App() {
 }
 ```
 
+**`Link` vs `<a href>`:** Always use `Link` for internal navigation. A plain `<a href>` causes a full page reload, losing all React state. `Link` uses the History API to update the URL and re-render without a reload.
+
 ---
 
 ## Dynamic Routes & useParams
 
-A dynamic route uses `:paramName` in the path. `useParams()` extracts the value from the current URL.
+A dynamic route uses `:paramName` in the path. The `:id` segment matches any value — `/listings/1`, `/listings/42`, `/listings/bali-villa` all match `/listings/:id`.
+
+`useParams()` extracts the matched values from the current URL as strings.
 
 ```tsx
 import { useParams } from 'react-router-dom'
 
 // Route defined as: <Route path="/listings/:id" element={<ListingDetail />} />
-// URL: /listings/3
+// URL: /listings/3  →  params = { id: '3' }
 
 function ListingDetail() {
-  // useParams extracts :id from the URL
+  // TypeScript generic tells useParams what params to expect
   const { id } = useParams<{ id: string }>()
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Re-fetch when the ID in the URL changes
+    // id is in the dependency array — effect re-runs when the URL changes
+    // e.g., navigating from /listings/1 to /listings/2
     fetchListing(Number(id)).then(data => {
       setListing(data)
       setLoading(false)
@@ -140,11 +150,13 @@ function ListingDetail() {
 }
 ```
 
+**Important:** `useParams` always returns strings. If your ID is a number, convert it with `Number(id)` or `parseInt(id, 10)`.
+
 ---
 
 ## useNavigate
 
-`useNavigate` returns a function that lets you programmatically navigate to a different route.
+`useNavigate` returns a function that lets you programmatically navigate to a different route — useful after form submissions, login, or any action that should redirect the user.
 
 ```tsx
 import { useNavigate } from 'react-router-dom'
@@ -157,22 +169,23 @@ function ListingCard({ id }: { id: number }) {
       {/* Navigate to detail page */}
       <button onClick={() => navigate(`/listings/${id}`)}>View Details</button>
 
-      {/* Go back in browser history */}
+      {/* Go back in browser history — like clicking the back button */}
       <button onClick={() => navigate(-1)}>Back</button>
 
       {/* Replace current history entry — back button won't return here */}
+      {/* Use after login — you don't want the user going back to the login page */}
       <button onClick={() => navigate('/login', { replace: true })}>Login</button>
     </div>
   )
 }
 
-// After form submission
+// After form submission — redirect with state
 function BookingForm() {
   const navigate = useNavigate()
 
   const handleSubmit = async (data: BookingData) => {
     await submitBooking(data)
-    // Redirect to confirmation page after successful booking
+    // Pass data to the next page via location state
     navigate('/booking/confirmation', { state: { booking: data } })
   }
 }
@@ -182,7 +195,7 @@ function BookingForm() {
 
 ## Protected Routes
 
-A protected route checks if the user is authenticated before rendering the component. If not, it redirects to the login page.
+A protected route checks if the user is authenticated before rendering the component. If not, it redirects to the login page. This is the React Router equivalent of server-side auth middleware.
 
 ```tsx
 import { Navigate } from 'react-router-dom'
@@ -191,10 +204,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
 
   if (!isAuthenticated) {
+    // Navigate component performs a redirect
     // 'replace' prevents the user from pressing back to get to the protected page
     return <Navigate to="/login" replace />
   }
 
+  // If authenticated, render the protected content
   return <>{children}</>
 }
 
@@ -218,7 +233,9 @@ function useAuth() {
 
 ## Nested Routes & Outlet
 
-Nested routes share a layout. The parent component renders `<Outlet />` where child routes should appear.
+Nested routes share a layout. The parent component renders `<Outlet />` as a placeholder — React Router replaces it with the matched child route's component.
+
+**Use case:** A listings section where all pages share the same sub-navigation bar, but the main content area changes per route.
 
 ```tsx
 import { Outlet, NavLink } from 'react-router-dom'
@@ -227,12 +244,13 @@ import { Outlet, NavLink } from 'react-router-dom'
 function ListingsLayout() {
   return (
     <div>
+      {/* This nav renders on ALL /listings/* routes */}
       <nav className="listings-nav">
         <NavLink to="/listings">All</NavLink>
         <NavLink to="/listings/map">Map View</NavLink>
         <NavLink to="/listings/saved">Saved</NavLink>
       </nav>
-      {/* Child route renders here */}
+      {/* The matched child route renders here */}
       <Outlet />
     </div>
   )
@@ -247,11 +265,17 @@ function ListingsLayout() {
 </Route>
 ```
 
+`index` means "render this when the parent path matches exactly" — `/listings` renders `ListingsGrid`, not `ListingsLayout` alone.
+
 ---
 
 ## Lazy Loading with React.lazy
 
-`React.lazy` defers loading a component's code until it's first rendered. Combined with `Suspense`, this splits your JavaScript bundle — the initial page loads faster because it only downloads the code it needs.
+`React.lazy` defers loading a component's JavaScript until it's first rendered. Combined with `Suspense`, this splits your bundle — the initial page loads faster because it only downloads the code it needs right now.
+
+**Without lazy loading:** All pages are bundled into one JS file. The user downloads code for the Dashboard even if they never visit it.
+
+**With lazy loading:** Each page is a separate JS file. The Dashboard code is only downloaded when the user first navigates to `/dashboard`.
 
 ```tsx
 import { lazy, Suspense } from 'react'
@@ -263,9 +287,10 @@ const BookingForm = lazy(() => import('./pages/BookingForm'))
 
 function App() {
   return (
-    // Suspense shows the fallback while the lazy component loads
+    // Suspense shows the fallback while the lazy component's JS is downloading
     <Suspense fallback={<div className="spinner" />}>
       <Routes>
+        {/* Home is NOT lazy — it's the first thing users see */}
         <Route path="/" element={<Home />} />
         <Route path="/listings/:id" element={<ListingDetail />} />
         <Route path="/listings/:id/book" element={<BookingForm />} />
@@ -279,6 +304,8 @@ function App() {
   )
 }
 ```
+
+**Rule of thumb:** Lazy load any page that isn't on the critical path (not the first thing users see). Keep the home page and main listings page eager-loaded.
 
 ---
 
@@ -295,11 +322,13 @@ As your app grows, passing state through props becomes unwieldy. Global state ma
 | Redux Toolkit | ~15kb | Medium | Large teams, complex state |
 | Jotai | ~3kb | Low | Atomic state |
 
+**Why not just use Context for everything?** Context re-renders every subscriber when the value changes. If you put all your state in one context, every component that reads any part of it re-renders on every state change. Zustand solves this with fine-grained subscriptions.
+
 ---
 
 ## Zustand
 
-Zustand is a minimal global state library. You define a store with state and actions. Any component subscribes to the slice it needs — only re-renders when that slice changes.
+Zustand is a minimal global state library. You define a store with state and actions. Any component subscribes to the **exact slice** it needs — it only re-renders when that slice changes.
 
 ```bash
 npm install zustand
@@ -315,7 +344,7 @@ interface StoreState {
   loading: boolean
   filter: string
   saved: number[]
-  // Actions
+  // Actions — functions that update state
   setListings: (listings: Listing[]) => void
   setLoading: (loading: boolean) => void
   setFilter: (filter: string) => void
@@ -333,6 +362,7 @@ export const useStore = create<StoreState>((set) => ({
   setLoading: (loading) => set({ loading }),
   setFilter: (filter) => set({ filter }),
 
+  // set receives the current state — use it for updates that depend on previous state
   toggleSaved: (id) => set((state) => ({
     saved: state.saved.includes(id)
       ? state.saved.filter(x => x !== id)
@@ -346,7 +376,8 @@ export const useStore = create<StoreState>((set) => ({
 ```tsx
 // Any component — subscribe to only the slice you need
 function SearchBar() {
-  // Only re-renders when filter changes
+  // This component ONLY re-renders when filter changes
+  // It does NOT re-render when listings, loading, or saved changes
   const filter = useStore(state => state.filter)
   const setFilter = useStore(state => state.setFilter)
 
@@ -377,11 +408,13 @@ function ListingCard({ id }: { id: number }) {
 }
 ```
 
+**Key insight:** The selector function `state => state.filter` is what makes Zustand efficient. The component only subscribes to the specific value it selects — not the entire store.
+
 ---
 
 ## React.memo
 
-`React.memo` wraps a component so it only re-renders when its props actually change. Without it, a component re-renders every time its parent re-renders — even if its own props didn't change.
+By default, when a parent component re-renders, all its children re-render too — even if their props didn't change. `React.memo` wraps a component so it only re-renders when its props actually change (shallow comparison).
 
 ```tsx
 import { memo, useCallback } from 'react'
@@ -402,11 +435,11 @@ function ListingsPage() {
   const [counter, setCounter] = useState(0)
 
   // Without useCallback — new function reference on every render
-  // This breaks memo because onToggle "changes" every render
-  const handleToggle = (id: number) => toggleSaved(id)  // BAD
+  // This breaks memo because onToggle "changes" every render (new reference)
+  // const handleToggle = (id: number) => toggleSaved(id)  // BAD
 
   // With useCallback — stable reference, memo works correctly
-  const handleToggle = useCallback((id: number) => toggleSaved(id), [toggleSaved])  // GOOD
+  const handleToggle = useCallback((id: number) => toggleSaved(id), [toggleSaved])
 
   return (
     <div>
@@ -422,11 +455,18 @@ function ListingsPage() {
 }
 ```
 
+**When to use `React.memo`:**
+- The component renders often
+- The component is expensive to render (complex JSX, heavy computation)
+- Its props usually don't change when the parent re-renders
+
+**Don't over-use it.** `React.memo` itself has a cost — it runs a shallow comparison on every render. For simple components, the comparison cost can exceed the re-render cost.
+
 ---
 
 ## Virtualization
 
-Rendering 1000 list items in the DOM is slow. Virtualization only renders the items currently visible in the viewport. As the user scrolls, items are swapped in and out.
+Rendering 1000 list items in the DOM is slow — the browser has to lay out and paint all 1000 elements even if only 10 are visible. Virtualization only renders the items currently visible in the viewport. As the user scrolls, items are swapped in and out.
 
 ```bash
 npm install react-window
@@ -445,7 +485,7 @@ const listings = Array.from({ length: 1000 }, (_, i) => ({
 function Row({ index, style }: { index: number; style: React.CSSProperties }) {
   const item = listings[index]
   return (
-    // style MUST be applied — it positions the row absolutely
+    // style MUST be applied — it contains the absolute positioning that places the row correctly
     <div style={style} className="list-row">
       <span>{item.title}</span>
       <span>${item.price}</span>
@@ -455,11 +495,12 @@ function Row({ index, style }: { index: number; style: React.CSSProperties }) {
 
 function VirtualListings() {
   return (
-    // Only ~10 rows rendered at a time regardless of list size
+    // Only ~10 rows rendered in the DOM at a time, regardless of list size
+    // Scrolling swaps rows in and out — DOM stays small and fast
     <FixedSizeList
-      height={500}
+      height={500}              // visible height of the list container
       itemCount={listings.length}
-      itemSize={64}
+      itemSize={64}             // height of each row in pixels
       width="100%"
     >
       {Row}
@@ -468,6 +509,8 @@ function VirtualListings() {
 }
 ```
 
+**When to virtualize:** Lists with more than ~100 items where each item has non-trivial rendering. For small lists, virtualization adds complexity without benefit.
+
 ---
 
 ## Assignment
@@ -475,103 +518,6 @@ function VirtualListings() {
 > See **[assignment-3.md](./assignment-3.md)** for the full description, file structure, acceptance criteria, and submission checklist.
 
 **Summary:** Build a multi-page Airbnb app with React Router v6, a Zustand global store, `React.memo` optimization, and a virtualized list of 50 items.
-
----
-
-**Resources**
-- [React Router v6 Docs](https://reactrouter.com/en/main)
-- [Zustand Docs](https://zustand-demo.pmnd.rs)
-- [React Docs — lazy](https://react.dev/reference/react/lazy)
-- [React Docs — memo](https://react.dev/reference/react/memo)
-- [react-window Docs](https://react-window.vercel.app)
-
-<!-- original tasks below for reference -->
-
-### Tasks (see assignment-3.md for full details)
-
-1. Install `react-router-dom` and wrap your app in `BrowserRouter`
-2. Create these pages: `Home` (listings grid), `ListingDetail` (dynamic `:id`), `Login`, `Dashboard`
-3. Add a `NavLink` navigation bar with active styling
-4. Use `useParams` in `ListingDetail` to fetch and display the correct listing
-5. Build a `ProtectedRoute` that redirects to `/login` if not authenticated
-6. Lazy load `Dashboard` and `ListingDetail` with `React.lazy` + `Suspense`
-7. Add a 404 catch-all route
-8. Install `zustand` and create a store with: `listings`, `filter`, `saved`, `setFilter`, `toggleSaved`, `reset`
-9. Replace all `useState` for filter/saved with `useStore` selectors
-10. Wrap `ListingCard` with `React.memo` and the toggle handler with `useCallback`
-11. Generate 50 listings and implement a virtualized list using `react-window`
-
-### Starter Code
-
-```tsx
-// src/store/useStore.ts
-import { create } from 'zustand'
-
-interface StoreState {
-  listings: Listing[]
-  filter: string
-  saved: number[]
-  setListings: (l: Listing[]) => void
-  setFilter: (f: string) => void
-  toggleSaved: (id: number) => void
-}
-
-export const useStore = create<StoreState>((set) => ({
-  listings: [],
-  filter: '',
-  saved: [],
-  setListings: (listings) => set({ listings }),
-  setFilter: (filter) => set({ filter }),
-  toggleSaved: (id) => set((state) => ({
-    // TODO: add or remove id from saved
-  })),
-}))
-
-// src/App.tsx
-import { lazy, Suspense } from 'react'
-import { Routes, Route, NavLink } from 'react-router-dom'
-
-const ListingDetail = lazy(() => import('./pages/ListingDetail'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-
-function App() {
-  return (
-    <div>
-      <nav>
-        {/* TODO: NavLink for Home, Dashboard */}
-      </nav>
-      <Suspense fallback={<div className="spinner" />}>
-        <Routes>
-          {/* TODO: all routes */}
-        </Routes>
-      </Suspense>
-    </div>
-  )
-}
-
-// src/pages/ListingDetail.tsx
-function ListingDetail() {
-  const { id } = useParams<{ id: string }>()
-  const listings = useStore(s => s.listings)
-  const listing = listings.find(l => l.id === Number(id))
-
-  if (!listing) return <p>Not found</p>
-  // TODO: render full listing detail
-}
-
-// src/components/ListingCard.tsx
-const ListingCard = memo(function ListingCard({ id, title, price, img }: Props) {
-  const saved = useStore(s => s.saved)
-  const toggleSaved = useStore(s => s.toggleSaved)
-
-  const handleToggle = useCallback(() => toggleSaved(id), [id, toggleSaved])
-  // TODO: render card with heart button
-})
-```
-
-### Expected Output
-
-A multi-page app with working navigation. Clicking a listing navigates to `/listings/:id` and shows full details. Dashboard redirects to login if not authenticated. Login grants access. Dashboard lazy-loads with a spinner. Global store powers filter and saved state across all pages. ListingCard only re-renders when its own props change. A virtualized list of 50 items renders only visible rows.
 
 ---
 
