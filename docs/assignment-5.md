@@ -1,363 +1,170 @@
-# Assignment 5: Patterns & TypeScript Refactor
+# Assignment 5: Advanced Patterns & Full TypeScript
 
 ## Description
 
-Refactor your Airbnb app using Higher-Order Components, compound components, the Provider pattern, and full TypeScript types across every file. No `any` types, no implicit types — everything explicitly typed.
+The app works. Now you are going to make it professional. This assignment is about **patterns** — reusable solutions to common problems that every large React codebase uses.
+
+You will learn three patterns: **Higher-Order Components** (HOCs) for cross-cutting concerns like auth guards and loading states, **Compound Components** for flexible UI composition, and **Generic Components and Hooks** for reusable logic that works with any type.
+
+You will also enforce full TypeScript coverage across the entire codebase. No `any` types. No implicit types. Explicit return type annotations on every hook. Every event handler typed correctly. This is what production TypeScript looks like.
+
+By the end of this assignment, the codebase is fully typed, the Card component is composable, the Dashboard is protected by a HOC instead of a wrapper component, and saved listings persist across page refreshes.
 
 ---
 
-## Setup
+## New Library to Learn — `immer`
+
+Managing immutable state updates in a reducer gets verbose. To update a nested field you have to spread every level:
+```
+return { ...state, listings: state.listings.map(l => l.id === id ? { ...l, saved: true } : l) }
+```
+
+`immer` lets you write mutations that look like direct assignments but produce immutable updates under the hood. You use `produce(state, draft => { draft.listings[0].saved = true })` and immer handles the immutability for you.
+
+Read the immer docs and understand `produce`, `Draft`, and how immer integrates with useReducer. Refactor your store reducer to use `produce` — every case becomes a simple mutation instead of a spread chain.
 
 ```bash
-cd airbnb-app
-npm install
-npm run dev
+npm install immer
 ```
 
 ---
 
-## File Structure
+## Libraries in This Assignment
+
+| Library | Purpose |
+|---------|---------|
+| `immer` | Write immutable state updates as simple mutations — refactor the store reducer |
+
+No other new packages — this phase is about refactoring and patterns.
+
+---
+
+## Target Structure
 
 ```
 src/
-├── components/
-│   ├── Card/
-│   │   ├── Card.tsx              # compound component root
-│   │   ├── Card.Image.tsx
-│   │   ├── Card.Title.tsx
-│   │   ├── Card.Location.tsx
-│   │   ├── Card.Price.tsx
-│   │   ├── Card.Rating.tsx
-│   │   ├── Card.Badge.tsx
-│   │   └── index.ts              # re-exports Card with sub-components attached
-│   ├── List.tsx                  # generic List<T> component
-│   ├── Navbar.tsx
-│   ├── ProtectedRoute.tsx
-│   └── Spinner.tsx
-├── hocs/
-│   ├── withAuth.tsx              # redirects if not authenticated
-│   └── withLoading.tsx           # shows spinner while loading
-├── context/
-│   ├── AuthContext.tsx
-│   └── FavoritesContext.tsx
-├── hooks/
-│   ├── useListings.ts
-│   ├── useListing.ts
-│   ├── useFavorites.ts
-│   ├── useToggleSaved.ts
-│   └── useLocalStorage.ts        # generic hook
-├── pages/
-│   ├── Home.tsx
-│   ├── ListingDetail.tsx
-│   ├── Login.tsx
-│   └── Dashboard.tsx             # protected via withAuth HOC
-├── types/
-│   └── index.ts                  # all interfaces here
-├── App.tsx
-└── main.tsx
+├── features/
+│   ├── listings/
+│   │   ├── components/
+│   │   │   └── Card/
+│   │   │       ├── Card.tsx
+│   │   │       ├── Card.Image.tsx
+│   │   │       ├── Card.Title.tsx
+│   │   │       ├── Card.Location.tsx
+│   │   │       ├── Card.Price.tsx
+│   │   │       ├── Card.Rating.tsx
+│   │   │       ├── Card.Badge.tsx
+│   │   │       └── index.ts
+│   │   ├── hooks/
+│   │   ├── pages/
+│   │   ├── types.ts
+│   │   └── index.ts
+│   ├── bookings/
+│   └── auth/
+│       └── pages/
+│           └── DashboardPage.tsx    ← protected via withAuth HOC
+├── shared/
+│   ├── components/
+│   │   ├── List.tsx
+│   │   └── ...
+│   ├── hooks/
+│   │   └── useLocalStorage.ts
+│   └── hocs/
+│       ├── withAuth.tsx
+│       └── withLoading.tsx
+├── store/
+│   ├── types.ts
+│   ├── reducer.ts                   ← refactor with immer
+│   └── StoreContext.tsx
+└── ...
 ```
 
 ---
 
 ## Tasks
 
-1. Define all interfaces in `src/types/index.ts`: `Listing`, `Booking`, `User`, `BookingData`, `StoreState`
-2. Build `withAuth<P>` HOC in `src/hocs/withAuth.tsx` — redirects to `/login` if `isAuthenticated` is false
-3. Build `withLoading<P>` HOC in `src/hocs/withLoading.tsx` — renders `<Spinner />` while `isLoading` is true
-4. Apply `withAuth` to `Dashboard` — remove `ProtectedRoute` wrapper from routes
-5. Refactor `ListingCard` into a compound component in `src/components/Card/` — `Card`, `Card.Image`, `Card.Title`, `Card.Location`, `Card.Price`, `Card.Rating`, `Card.Badge`
-6. Use the compound `Card` in `Home.tsx` and `ListingDetail.tsx`
-7. Build a generic `List<T>` component in `src/components/List.tsx`
-8. Use `List<Listing>` for the listings grid and `List<Listing>` for the saved panel
-9. Create `src/hooks/useLocalStorage.ts` — generic `useLocalStorage<T>(key, initial)` hook
-10. Use `useLocalStorage<number[]>('saved', [])` to persist saved listings across page refreshes
-11. Add explicit return types to all custom hooks
-12. Type all event handlers with `React.ChangeEvent`, `React.MouseEvent`, `React.FormEvent`
-13. Add explicit generic types to all `useState` calls that use `null` or `[]` as initial values
+### 1. Refactor the Reducer with Immer
+Install `immer`. Refactor `src/store/reducer.ts` to use `produce` from immer. Each case in the switch statement should directly mutate the `draft` instead of spreading. For example, `SET_FILTER` becomes `draft.filter = action.payload` instead of `return { ...state, filter: action.payload }`. The reducer logic becomes much easier to read. Verify the app still works exactly the same after the refactor.
 
----
+### 2. Build the withAuth HOC
+Create `src/shared/hocs/withAuth.tsx`. A HOC is a function that takes a component and returns a new component. Use the generic type `<P extends object>` so it works with any component's props. Inside the returned component, call `useAuth` to check `isAuthenticated`. If false, return `<Navigate to="/login" replace />`. If true, return `<Component {...props} />`. The HOC adds auth protection without the wrapped component knowing anything about auth.
 
-## Starter Code
+### 3. Build the withLoading HOC
+Create `src/shared/hocs/withLoading.tsx`. This HOC adds an `isLoading` prop to any component. If `isLoading` is true, render `<Spinner />`. If false, render the wrapped component with all its original props. Use `<P extends object>` generic and return type `React.ComponentType<P & { isLoading: boolean }>`.
 
-### `src/types/index.ts`
+### 4. Apply withAuth to DashboardPage
+Wrap `DashboardPage` with `withAuth` at the bottom of the file: `export default withAuth(DashboardPage)`. In `App.tsx`, remove the `<ProtectedRoute>` wrapper from the dashboard route — the HOC handles protection now. The dashboard should still redirect to `/login` when not authenticated.
 
-```ts
-export interface Listing {
-  id: number
-  title: string
-  location: string
-  price: number
-  rating: number
-  superhost: boolean
-  available: boolean
-  img: string
-}
+### 5. Refactor ListingCard into a Compound Component
+The current `ListingCard` is a monolithic component — you can't control which parts render or in what order. The compound component pattern fixes this by splitting it into composable pieces.
 
-export interface Booking {
-  id: number
-  listingId: number
-  checkIn: string
-  checkOut: string
-  guests: number
-  totalPrice: number
-  status: 'pending' | 'confirmed' | 'cancelled'
-}
+Create `src/features/listings/components/Card/Card.tsx`. This is the root component. It creates a React context that holds the `listing` object and wraps children in a `CardContext.Provider`. Create a `useCard` hook that reads the context and throws a clear error if used outside `<Card>`.
 
-export interface User {
-  id: number
-  name: string
-  email: string
-  avatar?: string
-}
+Create six sub-components, each in its own file: `Card.Image.tsx` (renders the listing image), `Card.Title.tsx` (renders the title), `Card.Location.tsx` (renders location with icon), `Card.Price.tsx` (renders formatted price), `Card.Rating.tsx` (renders star + rating), `Card.Badge.tsx` (renders Superhost/Luxury badges). Each sub-component calls `useCard()` to get the listing — no props needed.
 
-export type ListingStatus = 'available' | 'booked' | 'pending'
-```
+In `src/features/listings/components/Card/index.ts`, use `Object.assign` to attach all sub-components as static properties on `Card` and export the result. This enables the `<Card.Image />` syntax.
 
-### `src/hocs/withAuth.tsx`
+### 6. Use the Compound Card in Pages
+In `ListingsPage`, replace `<ListingCard listing={l} saved={...} onToggleSave={...} />` with the compound card syntax: `<Card listing={l}><Card.Image /><Card.Badge /><Card.Location /><Card.Title /><Card.Price /><Card.Rating /></Card>`. Do the same in `ListingDetail`. Notice how you can now reorder or omit sub-components without touching the Card component itself.
 
-```tsx
-import { Navigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+### 7. Build the Generic List Component
+Create `src/shared/components/List.tsx`. Use a generic type `<T>` for the items. Accept these props: `items: T[]`, `renderItem: (item: T, index: number) => React.ReactNode`, `keyExtractor: (item: T) => string | number`, `emptyMessage?: string`, `loading?: boolean`, `className?: string`. If `loading` is true, render `<Spinner />`. If `items` is empty, render the empty message. Otherwise, map over items and render each with `renderItem`. This component works with any data type — listings, bookings, users, strings.
 
-export function withAuth<P extends object>(
-  Component: React.ComponentType<P>
-): React.ComponentType<P> {
-  return function AuthGuard(props: P) {
-    const { isAuthenticated } = useAuth()
+### 8. Use List<Listing> in ListingsPage
+Replace the manual `.map()` in `ListingsPage` with `<List<Listing> items={filtered} keyExtractor={l => l.id} renderItem={l => <Card listing={l}>...</Card>} />`. The generic ensures TypeScript knows the type of each item in `renderItem`.
 
-    if (!isAuthenticated) {
-      return <Navigate to="/login" replace />
-    }
+### 9. Build the Generic useLocalStorage Hook
+Create `src/shared/hooks/useLocalStorage.ts`. Use generic type `<T>`. Accept `key: string` and `initial: T`. Return `[T, (value: T) => void]`. On initialization, try to read from `localStorage` and parse the JSON — if it fails or is empty, use `initial`. When the setter is called, update state and write the new value to `localStorage` as JSON. Wrap the initialization in a try/catch in case `localStorage` is unavailable.
 
-    return <Component {...props} />
-  }
-}
-```
+### 10. Persist Saved Listings with useLocalStorage
+Replace the `saved` state in the store (or in `ListingsPage`) with `useLocalStorage<number[]>('saved', [])`. After this change, saved listings should survive a page refresh — open the app, save some listings, refresh the page, and they should still be saved.
 
-### `src/hocs/withLoading.tsx`
+### 11. Add Explicit Return Types to All Hooks
+Go through every custom hook in the codebase. Add an explicit return type annotation to each one. For hooks that return a query result, use the TanStack Query types. For custom hooks that return an object, define an interface for the return type. No hook should have an implicit return type.
 
-```tsx
-import { Spinner } from '../components/Spinner'
+### 12. Type All Event Handlers
+Find every `onChange`, `onClick`, and `onSubmit` handler in the codebase. Add explicit parameter types: `React.ChangeEvent<HTMLInputElement>` for input changes, `React.ChangeEvent<HTMLSelectElement>` for select changes, `React.MouseEvent<HTMLButtonElement>` for button clicks, `React.FormEvent<HTMLFormElement>` for form submits.
 
-export function withLoading<P extends object>(
-  Component: React.ComponentType<P>
-): React.ComponentType<P & { isLoading: boolean }> {
-  return function WithLoading({ isLoading, ...rest }: P & { isLoading: boolean }) {
-    if (isLoading) return <Spinner />
-    return <Component {...(rest as P)} />
-  }
-}
-```
+### 13. Add Explicit Generics to All useState Calls
+Find every `useState` call that uses `null`, `[]`, or `{}` as the initial value. Add an explicit generic type: `useState<Listing[]>([])`, `useState<User | null>(null)`, `useState<Record<string, string>>({})`. TypeScript should never have to infer these.
 
-### `src/components/Card/Card.tsx`
-
-```tsx
-import { createContext, useContext } from 'react'
-import type { Listing } from '../../types'
-
-interface CardContextType {
-  listing: Listing
-}
-
-const CardContext = createContext<CardContextType | null>(null)
-
-export function useCard(): CardContextType {
-  const ctx = useContext(CardContext)
-  if (!ctx) throw new Error('useCard must be used inside <Card>')
-  return ctx
-}
-
-interface CardProps {
-  listing: Listing
-  children: React.ReactNode
-  className?: string
-}
-
-export function Card({ listing, children, className }: CardProps) {
-  return (
-    <CardContext.Provider value={{ listing }}>
-      <div className={className ?? 'card'}>{children}</div>
-    </CardContext.Provider>
-  )
-}
-```
-
-### `src/components/Card/Card.Image.tsx`
-
-```tsx
-import { useCard } from './Card'
-
-export function CardImage() {
-  const { listing } = useCard()
-  return (
-    <img
-      src={listing.img}
-      alt={listing.title}
-      className="card-img"
-    />
-  )
-}
-```
-
-### `src/components/Card/index.ts`
-
-```ts
-import { Card } from './Card'
-import { CardImage } from './Card.Image'
-import { CardTitle } from './Card.Title'
-import { CardLocation } from './Card.Location'
-import { CardPrice } from './Card.Price'
-import { CardRating } from './Card.Rating'
-import { CardBadge } from './Card.Badge'
-
-// attach sub-components as static properties
-const CardWithSubs = Object.assign(Card, {
-  Image: CardImage,
-  Title: CardTitle,
-  Location: CardLocation,
-  Price: CardPrice,
-  Rating: CardRating,
-  Badge: CardBadge,
-})
-
-export { CardWithSubs as Card }
-```
-
-### `src/components/List.tsx`
-
-```tsx
-import { Spinner } from './Spinner'
-
-interface ListProps<T> {
-  items: T[]
-  renderItem: (item: T, index: number) => React.ReactNode
-  keyExtractor: (item: T) => string | number
-  emptyMessage?: string
-  loading?: boolean
-  className?: string
-}
-
-export function List<T>({
-  items,
-  renderItem,
-  keyExtractor,
-  emptyMessage = 'No items found',
-  loading = false,
-  className,
-}: ListProps<T>) {
-  if (loading) return <Spinner />
-  if (items.length === 0) return <p className="empty">{emptyMessage}</p>
-
-  return (
-    <ul className={className}>
-      {items.map((item, index) => (
-        <li key={keyExtractor(item)}>{renderItem(item, index)}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-### `src/hooks/useLocalStorage.ts`
-
-```ts
-import { useState } from 'react'
-
-export function useLocalStorage<T>(
-  key: string,
-  initial: T
-): [T, (value: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const stored = localStorage.getItem(key)
-      return stored ? (JSON.parse(stored) as T) : initial
-    } catch {
-      return initial
-    }
-  })
-
-  const set = (newValue: T): void => {
-    setValue(newValue)
-    localStorage.setItem(key, JSON.stringify(newValue))
-  }
-
-  return [value, set]
-}
-```
-
-### Usage in `src/pages/Home.tsx`
-
-```tsx
-import { Card } from '../components/Card'
-import { List } from '../components/List'
-import { useListings } from '../hooks/useListings'
-import type { Listing } from '../types'
-
-export default function Home() {
-  const { data: listings = [], isLoading } = useListings()
-
-  return (
-    <List<Listing>
-      items={listings}
-      loading={isLoading}
-      keyExtractor={l => l.id}
-      emptyMessage="No listings found"
-      renderItem={listing => (
-        <Card listing={listing}>
-          <Card.Image />
-          <Card.Badge />
-          <Card.Location />
-          <Card.Title />
-          <Card.Price />
-          <Card.Rating />
-        </Card>
-      )}
-    />
-  )
-}
-```
-
----
-
-## Run the Assignment
-
-```bash
-cd airbnb-app
-npm install
-npm run dev
-npm run build   # verify all TypeScript
-```
+### 14. Eliminate All `any` Types
+Run `grep -r ": any" src/` in the terminal. Fix every result. Also check for implicit `any` — if TypeScript is inferring `any` somewhere, add an explicit type. Run `npm run build` and fix all errors.
 
 ---
 
 ## Acceptance Criteria
 
-| # | Criteria | How to verify |
-|---|----------|---------------|
-| 1 | All interfaces in `src/types/index.ts` — `Listing`, `Booking`, `User`, `BookingData` | `npm run build` — no implicit type errors |
-| 2 | `withAuth` HOC redirects to `/login` when not authenticated | Visit `/dashboard` without login — redirected |
-| 3 | `withLoading` HOC shows `<Spinner />` while `isLoading` is true | Slow network — spinner shows before content |
-| 4 | `Dashboard` uses `withAuth` HOC — no `ProtectedRoute` wrapper in routes | Check `App.tsx` — no `ProtectedRoute` around Dashboard |
-| 5 | `Card` compound component has all 6 sub-components attached | `<Card.Image />`, `<Card.Title />` etc. all render correctly |
-| 6 | `Card` context throws if used outside `<Card>` | Use `Card.Title` outside `Card` — error thrown |
-| 7 | `List<T>` component works with `Listing[]` and `string[]` | Both usages compile and render |
-| 8 | `List<Listing>` used for listings grid | Home page uses `<List<Listing> ...>` |
-| 9 | `useLocalStorage<number[]>` persists saved listings | Save listings, refresh page — still saved |
-| 10 | All custom hooks have explicit return type annotations | Check each hook file — return type declared |
-| 11 | All event handlers typed with `React.ChangeEvent`, `React.MouseEvent`, `React.FormEvent` | Search for `e.target` — all `e` params typed |
-| 12 | No `any` types anywhere | `grep -r ": any" src/` — no results |
-| 13 | No implicit `any` — `strict: true` in `tsconfig.json` | `npm run build` passes with strict mode |
-| 14 | `npm run build` completes with zero errors | Build output shows no errors |
+| # | Criteria |
+|---|----------|
+| 1 | Store reducer refactored with `immer` — no spread operators in reducer cases |
+| 2 | `withAuth` HOC created in `src/shared/hocs/` |
+| 3 | `withLoading` HOC created in `src/shared/hocs/` |
+| 4 | `DashboardPage` uses `withAuth` HOC — no `ProtectedRoute` in `App.tsx` |
+| 5 | Dashboard still redirects to `/login` when not authenticated |
+| 6 | `Card` compound component has all 6 sub-components |
+| 7 | `useCard` throws a clear error if used outside `<Card>` |
+| 8 | Compound `Card` used in `ListingsPage` and `ListingDetail` |
+| 9 | `List<T>` generic component works with any type |
+| 10 | `List<Listing>` used in `ListingsPage` |
+| 11 | `useLocalStorage<T>` generic hook created |
+| 12 | Saved listings persist across page refreshes |
+| 13 | All custom hooks have explicit return type annotations |
+| 14 | All event handlers typed with `React.*Event` types |
+| 15 | All `useState` with `null` or `[]` have explicit generics |
+| 16 | `grep -r ": any" src/` returns no results |
+| 17 | `npm run build` passes with zero TypeScript errors |
 
 ---
 
 ## Submission Checklist
 
-- [ ] All 14 acceptance criteria pass
+- [ ] All 17 acceptance criteria pass
 - [ ] `npm run build` — zero TypeScript errors
-- [ ] `grep -r ": any" src/` — no results
+- [ ] `immer` used in the store reducer
+- [ ] No `any` types anywhere
 - [ ] `withAuth` HOC applied to Dashboard
-- [ ] Compound `Card` component used in at least 2 pages
-- [ ] `List<T>` generic component used for listings grid
+- [ ] Compound `Card` used in at least 2 pages
+- [ ] `List<T>` generic component used
 - [ ] `useLocalStorage` persists saved state across refreshes
 - [ ] All hook return types explicitly annotated

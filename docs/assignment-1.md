@@ -1,57 +1,67 @@
-# Assignment 1: Airbnb Listings Page
+# Assignment 1: Listings Feature Foundation
 
 ## Description
 
-Build a fully static Airbnb listings page using TypeScript, React components, props, conditional rendering, and `useState`. All data is hardcoded — no API calls yet. This is your foundation — every phase builds on top of it.
+You are building the first working version of an Airbnb clone. The goal of this assignment is to lay the correct foundation — not just make something that works, but make something that is structured to grow. Every future phase will add features on top of what you build here, so getting the structure right now saves you from painful refactoring later.
+
+You will follow the **feature-based architecture** defined in `structure.md`. This means all listing-related code lives under `src/features/listings/` — its own components, its own types, its own page. The page manages state and passes data down to components as props. Components are pure — they receive data and call callbacks, they do not own state.
+
+By the end of this assignment you will have a fully interactive listings page: 6 real listing cards with images, live search that filters as you type, a heart button on each card that toggles saved state, a saved-only filter, and an empty state when nothing matches.
 
 ---
 
-## What You'll Learn
+## New Library to Learn — `clsx`
 
-- How to scaffold a Vite + React + TypeScript project from scratch
-- How to define TypeScript interfaces and use them across files
-- How to build reusable components with typed props
-- How to render lists with `.map()` and why `key` matters
-- How to use `useState` for interactive UI — search, toggle, filter
-- How to use conditional rendering with `&&` and ternary operators
-- How to use external utility libraries to write cleaner code
+When you need to apply CSS classes conditionally in React, the naive approach is string concatenation or template literals:
+
+```
+className={`card ${saved ? 'card--saved' : ''} ${price > 300 ? 'card--luxury' : ''}`}
+```
+
+This gets messy fast. `clsx` is a tiny utility that accepts an object where keys are class names and values are booleans. It returns a clean string of only the truthy classes:
+
+```
+className={clsx('card', { 'card--saved': saved, 'card--luxury': price > 300 })}
+```
+
+Read the `clsx` docs and understand how to pass strings, objects, and arrays to it. You will use it on every conditional className in this assignment.
 
 ---
 
-## Packages to Install
+## Libraries in This Assignment
+
+| Library | Purpose |
+|---------|---------|
+| `clsx` | Conditional CSS class names without messy string concatenation |
+| `date-fns` | Format ISO date strings into human-readable dates like "Jan 12, 2025" |
+| `react-icons` | Drop-in SVG icons — heart, star, location pin — from Font Awesome and more |
+| `numeral` | Format numbers as currency ("$185") and fixed decimals ("4.97") |
 
 ```bash
-npm create vite@latest airbnb-app -- --template react-ts
-cd airbnb-app
-npm install
 npm install clsx date-fns react-icons numeral
 npm install -D @types/numeral
 ```
 
-| Package | What it does | Usage in this assignment |
-|---------|-------------|--------------------------|
-| `clsx` | Merges class names conditionally — no messy template literals | Apply `card--saved`, `card--luxury`, `card--booked` classes cleanly |
-| `date-fns` | Modern date utility library — format, parse, compare dates | Format `availableFrom` as "Jan 12, 2025" on each card |
-| `react-icons` | Thousands of icons from Font Awesome, Material, Heroicons etc. | Heart icon for save button, star icon for rating, location pin |
-| `numeral` | Format numbers — currency, percentages, abbreviations | Format price as "$185" and rating as "4.97" consistently |
-
 ---
 
-## File Structure
+## Target Structure
 
 ```
 src/
-├── components/
-│   ├── ListingCard.tsx
-│   ├── ListingCard.css
-│   ├── SearchBar.tsx
-│   └── SavedBadge.tsx
+├── features/
+│   └── listings/
+│       ├── components/
+│       │   ├── ListingCard.tsx
+│       │   ├── ListingCard.css
+│       │   ├── SearchBar.tsx
+│       │   └── SavedBadge.tsx
+│       ├── pages/
+│       │   └── ListingsPage.tsx
+│       ├── types.ts
+│       └── index.ts
 ├── data/
 │   └── listings.ts
-├── types/
-│   └── index.ts
 ├── App.tsx
-├── App.css
 └── main.tsx
 ```
 
@@ -59,225 +69,75 @@ src/
 
 ## Tasks
 
-1. Define a `Listing` interface in `src/types/index.ts` with fields: `id`, `title`, `location`, `price`, `rating`, `superhost`, `available`, `availableFrom`, `img`, `category`
-2. Create `src/data/listings.ts` with **6 listings** using real Unsplash image URLs
-3. Build `ListingCard.tsx` — accepts `listing`, `saved`, `onToggleSave` props
-4. Use `clsx` for all conditional className logic — `card--saved`, `card--luxury`, `card--booked`
-5. Use `react-icons` for the heart button (`FaHeart`, `FaRegHeart`), rating star (`FaStar`), and location pin (`FaMapMarkerAlt`)
-6. Use `date-fns` `format()` to display `availableFrom` as "Jan 12, 2025"
-7. Use `numeral` to format price as `$185/night` and rating as a fixed decimal
-8. Show a **Superhost** badge using `&&`
-9. Show **Available** or **Booked** using a ternary
-10. Show a **Luxury** tag for listings priced over `$300`
-11. Add a live **search input** that filters by `title` and `location`
-12. Add a **heart button** per card that toggles saved state
-13. Show a **saved count** badge
-14. Add a **Saved Only** toggle button
-15. Show an **empty state** when no listings match
+### 1. Create the Feature Folder Structure
+Create the `src/features/listings/` directory with subfolders `components/` and `pages/`. Create empty `types.ts` and `index.ts` files. This structure is the contract — everything listings-related lives here and nowhere else.
 
----
+### 2. Define the Listing Type
+In `src/features/listings/types.ts`, define and export a `Listing` interface. It needs these fields: `id` (number), `title` (string), `location` (string), `price` (number), `rating` (number), `superhost` (boolean), `available` (boolean), `availableFrom` (string — ISO date like "2025-01-12"), `img` (string — URL), and `category` (a union type of `'beach' | 'mountain' | 'city' | 'countryside'`). Every listing in the app will be shaped by this interface.
 
-## Starter Code
+### 3. Create Mock Listings Data
+Create `src/data/listings.ts` and export an array of exactly 6 listings. Use real Unsplash image URLs (format: `https://images.unsplash.com/photo-XXXXX?w=400&h=260&fit=crop`). Make sure you have variety: at least one of each category, a mix of superhost and non-superhost, at least one unavailable listing, and at least one listing priced over $300 so the luxury tag logic can be tested.
 
-### `src/types/index.ts`
+### 4. Build the ListingCard Component
+Create `src/features/listings/components/ListingCard.tsx`. This component accepts three props: `listing` (the full Listing object), `saved` (boolean — whether this listing is currently saved), and `onToggleSave` (a callback with no arguments). The component must:
+- Use `clsx` to apply `card--saved` when saved, `card--luxury` when price > 300, and `card--booked` when not available — no template literal conditionals
+- Use `react-icons` FaHeart when saved and FaRegHeart when not saved on the heart button, FaStar before the rating, and FaMapMarkerAlt before the location text
+- Use `date-fns` `format()` to display `availableFrom` as "Jan 12, 2025"
+- Use `numeral` to format price as "$185" and rating as "4.97"
+- Show a "Superhost" badge using `&&` — only renders when `superhost` is true
+- Show a "Luxury" tag using `&&` — only renders when `price > 300`
+- Show "Available" or "Booked" using a ternary on the `available` field
+- The heart button calls `onToggleSave` when clicked
 
-```ts
-export interface Listing {
-  id: number
-  title: string
-  location: string
-  price: number
-  rating: number
-  superhost: boolean
-  available: boolean
-  availableFrom: string    // ISO date string — "2025-01-12"
-  img: string
-  category: 'beach' | 'mountain' | 'city' | 'countryside'
-}
-```
+### 5. Build the SearchBar Component
+Create `src/features/listings/components/SearchBar.tsx`. This is a controlled input — it accepts `value` (string) and `onChange` (callback that receives the new string value) as props. The input's value is always driven by the `value` prop. When the user types, it calls `onChange` with the new value. Add a placeholder of "Search listings...". This component owns no state.
 
-### `src/data/listings.ts`
+### 6. Build the SavedBadge Component
+Create `src/features/listings/components/SavedBadge.tsx`. It accepts a `count` prop (number) and displays how many listings are saved. Handle singular and plural correctly — "1 saved" vs "3 saved". If count is 0, you can either hide the badge or show "0 saved" — your choice, but be consistent.
 
-```ts
-import type { Listing } from '../types'
+### 7. Build the ListingsPage
+Create `src/features/listings/pages/ListingsPage.tsx`. This is the only component in the listings feature that owns state. It manages three pieces of state: `query` (the current search string), `saved` (an array of listing IDs that are saved), and `savedOnly` (a boolean toggle). It imports the listings array from `src/data/listings.ts` and derives the filtered list from it — first filtering by query (matching title OR location, case-insensitive), then filtering by savedOnly if enabled. It renders the header with SearchBar, SavedBadge, and a "Saved Only" / "Show All" toggle button, a results count, a grid of ListingCard components, and an empty state message when the filtered list is empty.
 
-export const listings: Listing[] = [
-  {
-    id: 1,
-    title: 'Tropical Villa with Pool',
-    location: 'Bali, Indonesia',
-    price: 185,
-    rating: 4.97,
-    superhost: true,
-    available: true,
-    availableFrom: '2025-01-12',
-    category: 'beach',
-    img: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400&h=260&fit=crop',
-  },
-  // TODO: add 5 more listings with different categories
-]
-```
+### 8. Wire Up the Feature Public API
+In `src/features/listings/index.ts`, export `ListingsPage`. This is the only file that other parts of the app should import from — never import directly from inside the feature's subfolders.
 
-### `src/components/ListingCard.tsx`
-
-```tsx
-import clsx from 'clsx'
-import { format } from 'date-fns'
-import numeral from 'numeral'
-import { FaHeart, FaRegHeart, FaStar, FaMapMarkerAlt } from 'react-icons/fa'
-import type { Listing } from '../types'
-import './ListingCard.css'
-
-interface ListingCardProps {
-  listing: Listing
-  saved: boolean
-  onToggleSave: () => void
-}
-
-export function ListingCard({ listing, saved, onToggleSave }: ListingCardProps) {
-  const { title, location, price, rating, superhost, available, availableFrom, img } = listing
-
-  return (
-    <div className={clsx('card', { 'card--saved': saved, 'card--luxury': price > 300, 'card--booked': !available })}>
-      <div className="card-img-wrap">
-        <img src={img} alt={title} />
-        {superhost && <span className="badge badge--superhost">Superhost</span>}
-        {price > 300 && <span className="badge badge--luxury">Luxury</span>}
-        <button
-          className="heart-btn"
-          onClick={onToggleSave}
-          aria-label={saved ? 'Unsave listing' : 'Save listing'}
-        >
-          {/* TODO: use FaHeart when saved, FaRegHeart when not */}
-        </button>
-      </div>
-      <div className="card-body">
-        <p className="location">
-          {/* TODO: use FaMapMarkerAlt icon before location text */}
-          {location}
-        </p>
-        <h3 className="title">{title}</h3>
-        <p className="available-from">
-          Available from {format(new Date(availableFrom), 'MMM d, yyyy')}
-        </p>
-        <div className="card-footer">
-          <span className="price">
-            {/* TODO: use numeral to format price as "$185" */}
-            / night
-          </span>
-          <span className="rating">
-            {/* TODO: use FaStar icon before rating */}
-            {/* TODO: use numeral to format rating as "4.97" */}
-          </span>
-        </div>
-        <span className={clsx('status', { 'status--available': available, 'status--booked': !available })}>
-          {available ? 'Available' : 'Booked'}
-        </span>
-      </div>
-    </div>
-  )
-}
-```
-
-### `src/App.tsx`
-
-```tsx
-import { useState } from 'react'
-import { listings } from './data/listings'
-import { ListingCard } from './components/ListingCard'
-import { SearchBar } from './components/SearchBar'
-import { SavedBadge } from './components/SavedBadge'
-import type { Listing } from './types'
-import './App.css'
-
-export default function App() {
-  const [query, setQuery] = useState<string>('')
-  const [saved, setSaved] = useState<number[]>([])
-  const [savedOnly, setSavedOnly] = useState<boolean>(false)
-
-  const toggleSave = (id: number): void =>
-    setSaved(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-
-  const filtered: Listing[] = listings
-    .filter(l =>
-      l.title.toLowerCase().includes(query.toLowerCase()) ||
-      l.location.toLowerCase().includes(query.toLowerCase())
-    )
-    .filter(l => savedOnly ? saved.includes(l.id) : true)
-
-  return (
-    <div className="app">
-      <header className="header">
-        <h1>Airbnb Listings</h1>
-        <div className="controls">
-          <SearchBar value={query} onChange={setQuery} />
-          <SavedBadge count={saved.length} />
-          <button onClick={() => setSavedOnly(prev => !prev)}>
-            {savedOnly ? 'Show All' : 'Saved Only'}
-          </button>
-        </div>
-        <p className="results-count">{filtered.length} listing{filtered.length !== 1 ? 's' : ''} found</p>
-      </header>
-
-      {filtered.length === 0 ? (
-        <p className="empty">No listings match your search.</p>
-      ) : (
-        <div className="grid">
-          {filtered.map(l => (
-            <ListingCard
-              key={l.id}
-              listing={l}
-              saved={saved.includes(l.id)}
-              onToggleSave={() => toggleSave(l.id)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-```
-
----
-
-## Run the Assignment
-
-```bash
-cd airbnb-app
-npm run dev
-# open http://localhost:5173
-```
+### 9. Update App.tsx
+Import `ListingsPage` from `src/features/listings` (the index.ts) and render it as the main content of the app. App.tsx should be minimal — just rendering the page.
 
 ---
 
 ## Acceptance Criteria
 
-| # | Criteria | How to verify |
-|---|----------|---------------|
-| 1 | `Listing` interface has all 10 fields typed correctly | `npm run build` passes |
-| 2 | 6 listings with real Unsplash URLs and different categories | All 6 cards render with visible photos |
-| 3 | `clsx` used for all conditional classNames | No template literal class conditionals |
-| 4 | `react-icons` used for heart, star, and location pin | Icons visible on cards |
-| 5 | `date-fns` formats `availableFrom` as "Jan 12, 2025" | Cards show readable date |
-| 6 | `numeral` formats price and rating | Price shows "$185", rating shows "4.97" |
-| 7 | Superhost badge shows only when `superhost === true` | Toggle in data — badge appears/disappears |
-| 8 | Luxury tag shows only for `price > 300` | Only expensive listings show the tag |
-| 9 | Available/Booked status correct per listing | `available: false` cards show "Booked" |
-| 10 | Search filters by title AND location in real time | Type "bali" — only Bali listings remain |
-| 11 | Heart button toggles saved state | Click heart — saved, click again — unsaved |
-| 12 | Saved count badge updates correctly | Save 3 cards — badge shows "3" |
-| 13 | Saved Only button works | Only saved cards visible when active |
-| 14 | Empty state shows when no listings match | Type "zzz" — empty state appears |
-| 15 | No TypeScript errors | `npm run build` passes |
-| 16 | No `any` types | `grep -r ": any" src/` — no results |
+| # | Criteria |
+|---|----------|
+| 1 | Feature structure exists under `src/features/listings/` with `components/`, `pages/`, `types.ts`, `index.ts` |
+| 2 | `Listing` interface has all 10 fields with correct types including the category union |
+| 3 | 6 listings in `src/data/listings.ts` — variety of categories, prices, superhost, availability |
+| 4 | `clsx` used for all conditional classNames — no template literal conditionals |
+| 5 | `react-icons` used for heart, star, and location pin |
+| 6 | `date-fns` formats `availableFrom` as "Jan 12, 2025" |
+| 7 | `numeral` formats price as "$185" and rating as "4.97" |
+| 8 | Superhost badge only shows when `superhost === true` |
+| 9 | Luxury tag only shows when `price > 300` |
+| 10 | Available/Booked status is correct per listing |
+| 11 | SearchBar is a controlled component — no internal state |
+| 12 | Search filters by title AND location in real-time |
+| 13 | Heart button toggles saved state correctly |
+| 14 | Saved count in SavedBadge updates when hearts are toggled |
+| 15 | "Saved Only" toggle shows only saved listings |
+| 16 | Empty state message shows when no listings match |
+| 17 | `ListingsPage` is the only component with state |
+| 18 | Feature exports through `index.ts` — no deep imports |
+| 19 | `npm run build` passes with zero TypeScript errors |
 
 ---
 
 ## Submission Checklist
 
-- [ ] All 16 acceptance criteria pass
-- [ ] `npm run build` — zero errors
-- [ ] `clsx`, `date-fns`, `react-icons`, `numeral` all used
-- [ ] No `console.error` warnings in the browser
-- [ ] All 6 listings have real Unsplash image URLs
-- [ ] All props typed with interfaces — no implicit `any`
+- [ ] All 19 acceptance criteria pass
+- [ ] Feature structure matches `structure.md`
+- [ ] Components are pure — receive data via props, no internal state
+- [ ] Page manages all state and passes it down
+- [ ] Feature exports only through `index.ts`
+- [ ] All 4 libraries used: `clsx`, `date-fns`, `react-icons`, `numeral`
+- [ ] No TypeScript errors

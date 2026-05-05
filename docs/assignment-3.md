@@ -1,68 +1,76 @@
-# Assignment 3: Multi-Page App with Routing & Global State
+# Assignment 3: Multi-Page App with Routing & Auth
 
 ## Description
 
-Build a multi-page Airbnb app with React Router v6, a Context API + useReducer global store, `React.memo` optimization, and a virtualized listings list. The app must have working navigation, protected routes, lazy loading, and a global store that powers filter and saved state across all pages.
+So far the app is a single page. Real apps have multiple pages — a home page, a listing detail page, a login page, a dashboard. In this assignment you will turn the app into a multi-page experience using React Router v6.
+
+You will also add a second feature: **auth**. The auth feature lives under `src/features/auth/` and is completely self-contained — its own context, its own hooks, its own pages. The listings feature does not know about auth. The auth feature does not know about listings. They communicate only through the shared store and shared components.
+
+You will also learn two important performance techniques: lazy loading (splitting your JavaScript bundle so pages only load when visited) and virtualization (only rendering the DOM nodes that are visible on screen, not all 50 at once).
+
+By the end of this assignment, the app has 5 pages, working navigation, a login flow, a protected dashboard, and a listing detail page — all wired together with React Router.
 
 ---
 
-## What You'll Learn
+## New Library to Learn — `react-window`
 
-- How React Router v6 handles client-side navigation
-- How dynamic routes and `useParams` work
-- How to build protected routes with auth context
-- How nested routes and `Outlet` share layouts
-- How lazy loading splits your JavaScript bundle
-- How Context API + useReducer powers global state
-- How `React.memo` and `useCallback` prevent unnecessary re-renders
-- How virtualization handles large lists efficiently
+When you render a list of 50 or 500 items, React creates a DOM node for every single one. Most of them are off-screen and invisible, but they still exist in the DOM, consuming memory and slowing down scroll performance.
+
+`react-window` solves this with **virtualization** — it only renders the items that are currently visible in the viewport. As you scroll, it removes items that go off-screen and adds new ones that come into view. The DOM always has ~10 nodes regardless of whether your list has 50 or 50,000 items.
+
+Read the `react-window` docs and understand `FixedSizeList`. You will use it to render the listings grid on the home page.
 
 ---
 
-## Packages to Install
+## Libraries in This Assignment
+
+| Library | Purpose |
+|---------|---------|
+| `react-router-dom` | Client-side routing — navigate between pages without a full page reload |
+| `react-window` | Virtualized lists — only render visible rows, not all 50 at once |
+| `nprogress` | Slim progress bar at the top of the page — shows when lazy pages are loading |
+| `dayjs` | Lightweight date formatting (2kb vs date-fns 13kb) — format dates on the detail page |
 
 ```bash
-cd airbnb-app
-npm install react-router-dom react-window react-hot-toast nprogress dayjs
+npm install react-router-dom react-window nprogress dayjs
 npm install -D @types/react-window @types/nprogress
 ```
 
-| Package | What it does | Usage in this assignment |
-|---------|-------------|--------------------------|
-| `react-router-dom` | Client-side routing — `Routes`, `Route`, `Link`, `NavLink`, `useParams`, `useNavigate` | Full multi-page navigation |
-| `react-window` | Virtualized lists — only renders visible rows in the DOM | Render 50 listings without performance issues |
-| `react-hot-toast` | Toast notifications | Show toast when navigating to a protected route without auth |
-| `nprogress` | Slim progress bar at the top of the page | Show loading bar when lazy-loaded pages are downloading |
-| `dayjs` | Lightweight date library (2kb vs date-fns 13kb) | Format listing dates on the detail page |
-
 ---
 
-## File Structure
+## Target Structure
 
 ```
 src/
-├── components/
-│   ├── ListingCard.tsx
-│   ├── ListingCard.module.css
-│   ├── Navbar.tsx
-│   ├── ProtectedRoute.tsx
-│   └── Spinner.tsx
-├── pages/
-│   ├── Home.tsx
-│   ├── ListingDetail.tsx
-│   ├── Login.tsx
-│   ├── Dashboard.tsx
-│   └── NotFound.tsx
+├── features/
+│   ├── listings/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   ├── pages/
+│   │   │   ├── ListingsPage.tsx
+│   │   │   └── ListingDetail.tsx
+│   │   ├── types.ts
+│   │   └── index.ts
+│   └── auth/
+│       ├── components/
+│       │   └── LoginForm.tsx
+│       ├── context/
+│       │   └── AuthContext.tsx
+│       ├── hooks/
+│       │   └── useAuth.ts
+│       ├── pages/
+│       │   ├── LoginPage.tsx
+│       │   └── DashboardPage.tsx
+│       ├── types.ts
+│       └── index.ts
+├── shared/
+│   └── components/
+│       ├── Navbar.tsx
+│       ├── ProtectedRoute.tsx
+│       ├── Spinner.tsx
+│       └── NotFound.tsx
 ├── store/
-│   ├── types.ts
-│   ├── reducer.ts
-│   └── StoreContext.tsx
-├── context/
-│   └── AuthContext.tsx
 ├── data/
-│   └── listings.ts
-├── types/
-│   └── index.ts
 ├── App.tsx
 └── main.tsx
 ```
@@ -71,276 +79,77 @@ src/
 
 ## Tasks
 
-1. Install all packages above
-2. Create `src/store/types.ts` — `State`, `Action` union, `initialState`
-3. Create `src/store/reducer.ts` — cases: `SET_LISTINGS`, `SET_LOADING`, `SET_FILTER`, `TOGGLE_SAVED`, `RESET`
-4. Create `src/store/StoreContext.tsx` — `StoreProvider`, `useStore` hook
-5. Create `src/context/AuthContext.tsx` — `AuthProvider`, `useAuth` hook
-6. Wrap `<App />` in `<BrowserRouter>`, `<StoreProvider>`, `<AuthProvider>` in `main.tsx`
-7. Create all 5 pages: `Home`, `ListingDetail`, `Login`, `Dashboard`, `NotFound`
-8. Create `Navbar` with `NavLink` — active styling on current route
-9. Create `ProtectedRoute` — redirects to `/login` and shows a toast if not authenticated
-10. Use `nprogress` to show a loading bar when lazy-loaded pages are downloading — start on navigation, finish when loaded
-11. Lazy load `ListingDetail` and `Dashboard` with `React.lazy` + `Suspense`
-12. Use `dayjs` on `ListingDetail` to format the listing's `availableFrom` date
-13. Wrap `ListingCard` with `React.memo`, wrap toggle handler with `useCallback`
-14. Generate 50 listings and implement a virtualized list on `Home` using `react-window`
-15. Add a 404 catch-all route
+### 1. Set Up React Router
+Wrap `<App />` with `<BrowserRouter>` in `main.tsx`. In `App.tsx`, define all routes using `<Routes>` and `<Route>`. App.tsx should contain only routes — no state, no useEffect, no data fetching. This is the rule from `structure.md`: App.tsx is routes only.
 
----
+### 2. Build the Auth Feature — Context and Hook
+Create `src/features/auth/context/AuthContext.tsx`. Build an `AuthProvider` that holds `isAuthenticated` (boolean), `login(email, password)`, and `logout()`. For now, `login` just sets `isAuthenticated` to true — no real API call. Create `src/features/auth/hooks/useAuth.ts` that returns the context and throws if used outside the provider. Wrap `<App />` with `<AuthProvider>` in `main.tsx`.
 
-## Starter Code
+### 3. Build the Auth Feature — Pages
+Create `src/features/auth/components/LoginForm.tsx` — a form with email and password fields that calls `login` on submit. Create `src/features/auth/pages/LoginPage.tsx` — renders the LoginForm and redirects to `/dashboard` after successful login using `useNavigate`. Create `src/features/auth/pages/DashboardPage.tsx` — shows a welcome message and the count of saved listings from the store. Export both pages through `src/features/auth/index.ts`.
 
-### `src/store/types.ts`
+### 4. Build Shared Navbar
+Create `src/shared/components/Navbar.tsx`. Use `NavLink` from react-router-dom for links to `/` (Home) and `/dashboard` (Dashboard). `NavLink` automatically adds an `active` class to the currently active link — use this to style the active link differently so users know which page they are on.
 
-```ts
-import type { Listing } from '../types'
+### 5. Build ProtectedRoute
+Create `src/shared/components/ProtectedRoute.tsx`. This component wraps a page and checks `isAuthenticated` from `useAuth`. If the user is not authenticated, show a toast notification ("Please log in to access this page") and redirect to `/login` using `<Navigate replace />`. If authenticated, render the children. This component is what makes the dashboard private.
 
-export type State = {
-  listings: Listing[]
-  loading: boolean
-  filter: string
-  saved: number[]
-}
+### 6. Build NotFound Page
+Create `src/shared/components/NotFound.tsx`. A simple 404 page with a message and a link back to the home page. This renders when no route matches.
 
-export type Action =
-  | { type: 'SET_LISTINGS'; payload: Listing[] }
-  | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'SET_FILTER'; payload: string }
-  | { type: 'TOGGLE_SAVED'; payload: number }
-  | { type: 'RESET' }
+### 7. Build the Listing Detail Page
+Create `src/features/listings/pages/ListingDetail.tsx`. Use `useParams` to extract the `id` from the URL. Find the matching listing from the store. If no listing matches, show a "Listing not found" message. If found, display the full listing — image, title, location, price, rating, superhost badge, and availability. Use `dayjs` to format `availableFrom` as a readable date. Add a back button that calls `useNavigate(-1)` to go back to the previous page. Make each listing card on the home page a clickable link to `/listings/:id`.
 
-export const initialState: State = {
-  listings: [],
-  loading: true,
-  filter: '',
-  saved: [],
-}
-```
+### 8. Define All Routes in App.tsx
+Set up these routes: `/` renders ListingsPage, `/listings/:id` renders ListingDetail (lazy loaded), `/login` renders LoginPage, `/dashboard` renders DashboardPage wrapped in ProtectedRoute (lazy loaded), and `*` renders NotFound. Wrap lazy-loaded routes in `<Suspense fallback={<Spinner />}>`.
 
-### `src/store/reducer.ts`
+### 9. Add NProgress Loading Bar
+In `App.tsx`, use `useLocation` to detect route changes. On every location change, start NProgress. After a short delay (100ms), finish it. This gives users visual feedback that navigation is happening, especially when lazy-loaded pages are downloading.
 
-```ts
-import type { State, Action } from './types'
+### 10. Lazy Load Heavy Pages
+Use `React.lazy` to lazy load `ListingDetail` and `DashboardPage`. These pages are only downloaded when the user navigates to them, keeping the initial bundle small. Verify this works by checking the Network tab — you should see separate JS chunks loading on navigation.
 
-export function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case 'SET_LISTINGS':  return { ...state, listings: action.payload }
-    case 'SET_LOADING':   return { ...state, loading: action.payload }
-    case 'SET_FILTER':    return { ...state, filter: action.payload }
-    case 'TOGGLE_SAVED':
-      return {
-        ...state,
-        saved: state.saved.includes(action.payload)
-          ? state.saved.filter(id => id !== action.payload)
-          : [...state.saved, action.payload],
-      }
-    case 'RESET': return { ...state, filter: '', saved: [] }
-    default:      return state
-  }
-}
-```
+### 11. Optimize ListingCard with React.memo
+Wrap `ListingCard` with `React.memo`. This prevents the card from re-rendering when its parent re-renders but its own props haven't changed. Wrap the `onToggleSave` callback in `ListingsPage` with `useCallback` so the function reference stays stable between renders — otherwise memo won't help because a new function is created every render.
 
-### `src/store/StoreContext.tsx`
+### 12. Virtualize the Listings List
+Expand `src/data/listings.ts` to 50 listings. Use `react-window` `FixedSizeList` in `ListingsPage` to render the list. Only the visible rows should be in the DOM at any time. Verify this by opening DevTools and inspecting the DOM — you should see ~10 card elements, not 50.
 
-```tsx
-import { createContext, useContext, useReducer } from 'react'
-import { reducer, initialState } from './reducer'
-import type { State, Action } from './types'
-
-interface StoreContextType {
-  state: State
-  dispatch: React.Dispatch<Action>
-}
-
-const StoreContext = createContext<StoreContextType | null>(null)
-
-export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState)
-  return (
-    <StoreContext.Provider value={{ state, dispatch }}>
-      {children}
-    </StoreContext.Provider>
-  )
-}
-
-export function useStore(): StoreContextType {
-  const ctx = useContext(StoreContext)
-  if (!ctx) throw new Error('useStore must be used inside StoreProvider')
-  return ctx
-}
-```
-
-### `src/context/AuthContext.tsx`
-
-```tsx
-import { createContext, useContext, useState } from 'react'
-
-interface AuthContextType {
-  isAuthenticated: boolean
-  login: (email: string, password: string) => void
-  logout: () => void
-}
-
-const AuthContext = createContext<AuthContextType | null>(null)
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
-
-  const login = (_email: string, _password: string): void => {
-    setIsAuthenticated(true)
-  }
-
-  const logout = (): void => setIsAuthenticated(false)
-
-  return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  )
-}
-
-export function useAuth(): AuthContextType {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
-  return ctx
-}
-```
-
-### `src/components/ProtectedRoute.tsx`
-
-```tsx
-import { Navigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
-import { useAuth } from '../context/AuthContext'
-
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth()
-
-  if (!isAuthenticated) {
-    // TODO: show a toast "Please log in to access this page"
-    return <Navigate to="/login" replace />
-  }
-
-  return <>{children}</>
-}
-```
-
-### `src/App.tsx`
-
-```tsx
-import { lazy, Suspense, useEffect } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
-import NProgress from 'nprogress'
-import 'nprogress/nprogress.css'
-import { Navbar } from './components/Navbar'
-import { ProtectedRoute } from './components/ProtectedRoute'
-import { Spinner } from './components/Spinner'
-import Home from './pages/Home'
-import Login from './pages/Login'
-import NotFound from './pages/NotFound'
-
-const ListingDetail = lazy(() => import('./pages/ListingDetail'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-
-export default function App() {
-  const location = useLocation()
-
-  useEffect(() => {
-    // TODO: start NProgress on location change, finish after a short delay
-  }, [location])
-
-  return (
-    <div>
-      <Navbar />
-      <Suspense fallback={<Spinner />}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/listings/:id" element={<ListingDetail />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={
-            <ProtectedRoute><Dashboard /></ProtectedRoute>
-          } />
-          {/* TODO: 404 catch-all */}
-        </Routes>
-      </Suspense>
-    </div>
-  )
-}
-```
-
-### `src/pages/ListingDetail.tsx`
-
-```tsx
-import { useParams, useNavigate } from 'react-router-dom'
-import dayjs from 'dayjs'
-import { useStore } from '../store/StoreContext'
-
-export default function ListingDetail() {
-  const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
-  const { state } = useStore()
-  const listing = state.listings.find(l => l.id === Number(id))
-
-  if (!listing) return <p>Listing not found</p>
-
-  return (
-    <div>
-      <button onClick={() => navigate(-1)}>← Back</button>
-      <img src={listing.img} alt={listing.title} />
-      <h1>{listing.title}</h1>
-      <p>{listing.location}</p>
-      <p>${listing.price} / night</p>
-      {/* TODO: use dayjs to format listing.availableFrom */}
-      {/* TODO: render full listing details */}
-    </div>
-  )
-}
-```
-
----
-
-## Run the Assignment
-
-```bash
-cd airbnb-app
-npm run dev
-# open http://localhost:5173
-# try navigating to /dashboard without logging in
-```
+### 13. Add RESET Action to Store
+Add a `RESET` action type to the store that clears `filter` and `saved` back to their initial values. Add a "Clear All" button somewhere in the UI that dispatches it.
 
 ---
 
 ## Acceptance Criteria
 
-| # | Criteria | How to verify |
-|---|----------|---------------|
-| 1 | `BrowserRouter`, `StoreProvider`, `AuthProvider` wrap the app | App renders without errors |
-| 2 | `reducer.ts` handles all 5 action types | `npm run build` passes |
-| 3 | Home page renders listings grid from store | Listings visible at `/` |
-| 4 | Clicking a listing navigates to `/listings/:id` | URL changes, correct listing shown |
-| 5 | `useParams` extracts the correct ID | Detail page shows right listing title |
-| 6 | `/dashboard` redirects to `/login` when not authenticated | Visit `/dashboard` — redirected |
-| 7 | `react-hot-toast` shows on protected route redirect | Toast appears when redirected |
-| 8 | `nprogress` bar shows when lazy pages load | Progress bar visible at top on navigation |
-| 9 | `dayjs` formats date on detail page | Readable date shown on listing detail |
-| 10 | Login form grants access to Dashboard | Submit form — Dashboard accessible |
-| 11 | `NavLink` shows active styling on current route | Active link visually distinct |
-| 12 | `ListingDetail` and `Dashboard` lazy load | Network tab shows separate JS chunks |
-| 13 | `ListingCard` wrapped with `React.memo` | No re-render on unrelated state changes |
-| 14 | Toggle handler wrapped with `useCallback` | Stable reference — memo works |
-| 15 | Virtualized list of 50 items renders only visible rows | DOM has ~10 rows, not 50 |
-| 16 | 404 page shows for unknown routes | Visit `/unknown` — NotFound renders |
-| 17 | No TypeScript errors | `npm run build` passes |
+| # | Criteria |
+|---|----------|
+| 1 | `BrowserRouter`, `StoreProvider`, `AuthProvider` all wrap the app in `main.tsx` |
+| 2 | `App.tsx` contains only routes — no state, no logic |
+| 3 | Navbar renders with NavLink active styling on current route |
+| 4 | Clicking a listing card navigates to `/listings/:id` |
+| 5 | ListingDetail shows the correct listing using `useParams` |
+| 6 | `dayjs` formats the date on the detail page |
+| 7 | Back button navigates to the previous page |
+| 8 | `/dashboard` redirects to `/login` when not authenticated |
+| 9 | Toast shows when redirected from a protected route |
+| 10 | Login form sets `isAuthenticated` and redirects to `/dashboard` |
+| 11 | `ListingDetail` and `DashboardPage` are lazy loaded — separate JS chunks in Network tab |
+| 12 | NProgress bar shows on navigation |
+| 13 | `ListingCard` wrapped with `React.memo` |
+| 14 | `onToggleSave` wrapped with `useCallback` |
+| 15 | Virtualized list of 50 items — DOM has ~10 rows, not 50 |
+| 16 | 404 page shows for unknown routes |
+| 17 | Each feature exports through its own `index.ts` |
+| 18 | `npm run build` passes with zero TypeScript errors |
 
 ---
 
 ## Submission Checklist
 
-- [ ] All 17 acceptance criteria pass
-- [ ] `npm run build` — zero errors
-- [ ] `react-router-dom`, `react-window`, `react-hot-toast`, `nprogress`, `dayjs` all used
-- [ ] Navigation works across all pages
-- [ ] Protected route redirects with toast
-- [ ] NProgress bar shows on lazy page load
-- [ ] Virtualized list scrolls smoothly with 50 items
+- [ ] All 18 acceptance criteria pass
+- [ ] Auth feature is self-contained under `src/features/auth/`
+- [ ] `App.tsx` is routes only
+- [ ] Shared components in `src/shared/components/`
+- [ ] All packages used: `react-router-dom`, `react-window`, `nprogress`, `dayjs`
+- [ ] No TypeScript errors
