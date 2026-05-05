@@ -2,18 +2,38 @@
 
 ## Description
 
-Build a full booking flow with TanStack Query for cached data fetching, a validated 4-step booking form with file upload, optimistic updates, and a complete Vitest + React Testing Library test suite.
+Build a full booking flow with TanStack Query for cached data fetching, a validated 4-step booking form, optimistic updates, and a complete Vitest + React Testing Library test suite.
 
 ---
 
-## Setup
+## What You'll Learn
+
+- How TanStack Query handles caching, loading, and error states automatically
+- How `useQuery` and `useMutation` replace manual fetch + useState patterns
+- How optimistic updates make the UI feel instant
+- How to build multi-step forms with per-step validation
+- How to validate forms with Zod schemas
+- How to write unit and integration tests with Vitest and React Testing Library
+- How to mock API calls in tests
+
+---
+
+## Packages to Install
 
 ```bash
 cd airbnb-app
-npm install @tanstack/react-query
+npm install @tanstack/react-query @tanstack/react-query-devtools zod react-hook-form @hookform/resolvers axios
 npm install -D vitest @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
-npm run dev
 ```
+
+| Package | What it does | Usage in this assignment |
+|---------|-------------|--------------------------|
+| `@tanstack/react-query` | Server state management — caching, background refetch, loading/error states | Fetch listings and single listing with automatic caching |
+| `@tanstack/react-query-devtools` | Browser DevTools panel showing all cache entries and their status | Debug query cache during development |
+| `zod` | TypeScript-first schema validation — define rules once, infer types automatically | Validate each booking form step before advancing |
+| `react-hook-form` | Performant forms with minimal re-renders — integrates with Zod via resolvers | Manage all booking form fields and validation |
+| `@hookform/resolvers` | Connects `react-hook-form` with Zod (and other validators) | Pass Zod schema directly to `useForm` as a resolver |
+| `axios` | HTTP client with interceptors, automatic JSON parsing, and better error handling than fetch | Replace raw `fetch` calls with `axios` in all query functions |
 
 ---
 
@@ -25,21 +45,25 @@ src/
 │   ├── ListingCard.tsx
 │   ├── ListingCard.module.css
 │   ├── BookingForm/
-│   │   ├── BookingForm.tsx         # 4-step form
-│   │   ├── StepDates.tsx           # step 1
-│   │   ├── StepPersonal.tsx        # step 2
-│   │   ├── StepPayment.tsx         # step 3
-│   │   └── StepConfirmation.tsx    # step 4
+│   │   ├── BookingForm.tsx
+│   │   ├── StepDates.tsx
+│   │   ├── StepPersonal.tsx
+│   │   ├── StepPayment.tsx
+│   │   └── StepConfirmation.tsx
 │   ├── Navbar.tsx
 │   ├── ProtectedRoute.tsx
 │   └── Spinner.tsx
 ├── hooks/
-│   ├── useListings.ts              # useQuery wrapper
-│   ├── useListing.ts               # single listing query
-│   └── useToggleSaved.ts           # useMutation with optimistic update
+│   ├── useListings.ts
+│   ├── useListing.ts
+│   └── useToggleSaved.ts
+├── lib/
+│   └── axios.ts              # axios instance with base URL
+├── schemas/
+│   └── booking.ts            # Zod schemas for each form step
 ├── pages/
 │   ├── Home.tsx
-│   ├── ListingDetail.tsx           # includes BookingForm
+│   ├── ListingDetail.tsx
 │   ├── Login.tsx
 │   └── Dashboard.tsx
 ├── tests/
@@ -60,54 +84,53 @@ src/
 
 ## Tasks
 
-1. Install `@tanstack/react-query` and wrap the app in `QueryClientProvider` in `main.tsx`
-2. Create `src/hooks/useListings.ts` — `useQuery` with `queryKey: ['listings']` and `staleTime: 5 * 60 * 1000`
-3. Create `src/hooks/useListing.ts` — `useQuery` with `queryKey: ['listing', id]`, `enabled: !!id`
-4. Create `src/hooks/useToggleSaved.ts` — `useMutation` with optimistic update: update cache immediately, roll back on error
-5. Build `BookingForm` as a 4-step form: **Dates & Guests → Personal Info → Payment → Confirmation**
-6. Validate each step before advancing — show inline error messages per field
-7. Add a file upload input in Step 2 for profile photo with image preview and 5MB size validation
-8. Handle all query states: `isLoading`, `isError`, `isFetching`, empty results
-9. Set up Vitest with `jsdom` environment and `@testing-library/jest-dom`
-10. Write `ListingCard.test.tsx` — test renders title, price, superhost badge, hides badge when false, calls `onToggleSave` on click
-11. Write `SearchFilter.test.tsx` — test search filters by title and location, clearing shows all
-12. Write `api.test.tsx` — mock fetch, test loading state then listings appear, test error state
-13. Write `BookingForm.test.tsx` — test required field validation, test advancing to next step on valid input
+1. Create `src/lib/axios.ts` — axios instance with `baseURL` from `import.meta.env.VITE_API_URL`
+2. Wrap the app in `QueryClientProvider` with `ReactQueryDevtools` in `main.tsx`
+3. Create `src/hooks/useListings.ts` — `useQuery` with `queryKey: ['listings']`, uses axios instance
+4. Create `src/hooks/useListing.ts` — `useQuery` with `queryKey: ['listing', id]`, `enabled: !!id`
+5. Create `src/hooks/useToggleSaved.ts` — `useMutation` with optimistic update and rollback on error
+6. Create `src/schemas/booking.ts` — Zod schemas for each step: dates, personal info, payment
+7. Build `BookingForm` as a 4-step form using `react-hook-form` + Zod resolver per step
+8. Show inline validation errors from Zod on each field
+9. Add file upload in Step 2 for profile photo with preview and 5MB validation
+10. Handle all query states: `isLoading`, `isError`, `isFetching`, empty results
+11. Set up Vitest with `jsdom` and `@testing-library/jest-dom`
+12. Write `ListingCard.test.tsx` — title, price, badge, toggle
+13. Write `SearchFilter.test.tsx` — filters by title and location
+14. Write `api.test.tsx` — mock axios, test loading → success → error states
+15. Write `BookingForm.test.tsx` — validation errors, step advancement
 
 ---
 
 ## Starter Code
 
-### `src/main.tsx`
+### `src/lib/axios.ts`
 
-```tsx
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AuthProvider } from './context/AuthContext'
-import App from './App'
-import './index.css'
+```ts
+import axios from 'axios'
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000,
-      retry: 2,
-    },
-  },
+export const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:3000',
+  headers: { 'Content-Type': 'application/json' },
 })
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
-  </StrictMode>
+// Request interceptor — attach auth token if present
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// Response interceptor — handle 401 globally
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
 )
 ```
 
@@ -115,20 +138,13 @@ createRoot(document.getElementById('root')!).render(
 
 ```ts
 import { useQuery } from '@tanstack/react-query'
+import { api } from '../lib/axios'
 import type { Listing } from '../types'
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
-
-async function fetchListings(): Promise<Listing[]> {
-  const res = await fetch(`${API_URL}/listings`)
-  if (!res.ok) throw new Error(`Failed to fetch listings: ${res.status}`)
-  return res.json()
-}
 
 export function useListings() {
   return useQuery<Listing[], Error>({
     queryKey: ['listings'],
-    queryFn: fetchListings,
+    queryFn: () => api.get<Listing[]>('/listings').then(res => res.data),
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -138,26 +154,20 @@ export function useListings() {
 
 ```ts
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+import { api } from '../lib/axios'
 
 export function useToggleSaved() {
   const queryClient = useQueryClient()
 
   return useMutation<void, Error, number>({
-    mutationFn: (id: number) =>
-      fetch(`${API_URL}/saved/${id}`, { method: 'POST' }).then(r => {
-        if (!r.ok) throw new Error('Failed to toggle saved')
-      }),
+    mutationFn: (id: number) => api.post(`/saved/${id}`).then(() => {}),
 
     onMutate: async (id: number) => {
       await queryClient.cancelQueries({ queryKey: ['saved'] })
       const previous = queryClient.getQueryData<number[]>(['saved'])
-
       queryClient.setQueryData<number[]>(['saved'], (old = []) =>
         old.includes(id) ? old.filter(x => x !== id) : [...old, id]
       )
-
       return { previous }
     },
 
@@ -172,77 +182,109 @@ export function useToggleSaved() {
 }
 ```
 
-### `src/components/BookingForm/BookingForm.tsx`
+### `src/schemas/booking.ts`
+
+```ts
+import { z } from 'zod'
+
+export const stepDatesSchema = z.object({
+  checkIn: z.string().min(1, 'Check-in date is required'),
+  checkOut: z.string().min(1, 'Check-out date is required'),
+  guests: z.number().min(1, 'At least 1 guest').max(16, 'Maximum 16 guests'),
+}).refine(data => data.checkIn < data.checkOut, {
+  message: 'Check-out must be after check-in',
+  path: ['checkOut'],
+})
+
+export const stepPersonalSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email('Valid email required'),
+  phone: z.string().min(7, 'Valid phone number required'),
+})
+
+export const stepPaymentSchema = z.object({
+  card: z.string().regex(/^\d{16}$/, '16-digit card number required'),
+  expiry: z.string().regex(/^\d{2}\/\d{2}$/, 'Format: MM/YY'),
+  cvv: z.string().regex(/^\d{3}$/, '3-digit CVV required'),
+})
+
+export type StepDatesData = z.infer<typeof stepDatesSchema>
+export type StepPersonalData = z.infer<typeof stepPersonalSchema>
+export type StepPaymentData = z.infer<typeof stepPaymentSchema>
+```
+
+### `src/components/BookingForm/StepDates.tsx`
 
 ```tsx
-import { useState } from 'react'
-import { StepDates } from './StepDates'
-import { StepPersonal } from './StepPersonal'
-import { StepPayment } from './StepPayment'
-import { StepConfirmation } from './StepConfirmation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { stepDatesSchema, type StepDatesData } from '../../schemas/booking'
 
-export interface BookingData {
-  checkIn: string
-  checkOut: string
-  guests: number
-  name: string
-  email: string
-  phone: string
-  photo: string | null
-  card: string
-  expiry: string
-  cvv: string
+interface StepDatesProps {
+  defaultValues: Partial<StepDatesData>
+  onNext: (data: StepDatesData) => void
 }
 
-const STEPS = ['Dates & Guests', 'Personal Info', 'Payment', 'Confirmation'] as const
-
-interface BookingFormProps {
-  listingId: number
-  listingTitle: string
-  pricePerNight: number
-}
-
-export function BookingForm({ listingId, listingTitle, pricePerNight }: BookingFormProps) {
-  const [step, setStep] = useState<number>(0)
-  const [data, setData] = useState<BookingData>({
-    checkIn: '', checkOut: '', guests: 1,
-    name: '', email: '', phone: '', photo: null,
-    card: '', expiry: '', cvv: '',
+export function StepDates({ defaultValues, onNext }: StepDatesProps) {
+  const { register, handleSubmit, formState: { errors } } = useForm<StepDatesData>({
+    resolver: zodResolver(stepDatesSchema),
+    defaultValues,
   })
-  const [errors, setErrors] = useState<Partial<Record<keyof BookingData, string>>>({})
-
-  const update = (field: keyof BookingData, value: string | number | null): void => {
-    setData(prev => ({ ...prev, [field]: value }))
-    setErrors(prev => ({ ...prev, [field]: undefined }))
-  }
-
-  const validate = (): boolean => {
-    const e: Partial<Record<keyof BookingData, string>> = {}
-    // TODO: validate fields for current step
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
-
-  const next = (): void => { if (validate()) setStep(s => s + 1) }
-  const back = (): void => setStep(s => s - 1)
 
   return (
-    <div className="booking-form">
-      {/* TODO: step indicator */}
-      {step === 0 && <StepDates data={data} errors={errors} onChange={update} />}
-      {step === 1 && <StepPersonal data={data} errors={errors} onChange={update} />}
-      {step === 2 && <StepPayment data={data} errors={errors} onChange={update} />}
-      {step === 3 && <StepConfirmation data={data} listingTitle={listingTitle} pricePerNight={pricePerNight} />}
-      <div className="form-actions">
-        {step > 0 && <button type="button" onClick={back}>Back</button>}
-        {step < STEPS.length - 1
-          ? <button type="button" onClick={next}>Continue</button>
-          : <button type="button" onClick={() => console.log('Booking confirmed', data)}>Confirm Booking</button>
-        }
-      </div>
-    </div>
+    <form onSubmit={handleSubmit(onNext)}>
+      <label>
+        Check-in
+        <input type="date" {...register('checkIn')} />
+        {errors.checkIn && <p className="error">{errors.checkIn.message}</p>}
+      </label>
+      <label>
+        Check-out
+        <input type="date" {...register('checkOut')} />
+        {errors.checkOut && <p className="error">{errors.checkOut.message}</p>}
+      </label>
+      {/* TODO: guests select field */}
+      <button type="submit">Continue</button>
+    </form>
   )
 }
+```
+
+### `src/main.tsx`
+
+```tsx
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { Toaster } from 'react-hot-toast'
+import { AuthProvider } from './context/AuthContext'
+import { StoreProvider } from './store/StoreContext'
+import App from './App'
+import './index.css'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 5 * 60 * 1000, retry: 2 },
+  },
+})
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <StoreProvider>
+          <AuthProvider>
+            <App />
+            <Toaster position="bottom-right" />
+          </AuthProvider>
+        </StoreProvider>
+      </BrowserRouter>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  </StrictMode>
+)
 ```
 
 ### `src/test-setup.ts`
@@ -284,6 +326,8 @@ const listing: Listing = {
   rating: 4.97,
   superhost: true,
   available: true,
+  availableFrom: '2025-01-12',
+  category: 'beach',
   img: 'https://example.com/photo.jpg',
 }
 
@@ -316,7 +360,6 @@ describe('ListingCard', () => {
 
 ```bash
 cd airbnb-app
-npm install
 npm run dev          # run the app
 npm test             # run tests in watch mode
 npm run build        # verify TypeScript
@@ -328,31 +371,33 @@ npm run build        # verify TypeScript
 
 | # | Criteria | How to verify |
 |---|----------|---------------|
-| 1 | `QueryClientProvider` wraps the app | App renders without TanStack Query errors |
-| 2 | `useListings` uses `useQuery` with correct `queryKey` and `staleTime` | React Query DevTools shows cache entry |
-| 3 | Listings load with `isLoading` spinner, `isError` retry button | Disconnect network — error state shows |
-| 4 | `useToggleSaved` optimistic update — UI updates before server responds | Toggle heart — instant UI change |
-| 5 | Optimistic update rolls back on error | Mock a failed mutation — state reverts |
-| 6 | Booking form has 4 steps with step indicators | All 4 steps navigable |
-| 7 | Step 1 validates check-in, check-out, guests before advancing | Leave check-in empty — error message shows |
-| 8 | Step 2 validates name, email format, phone before advancing | Enter invalid email — error message shows |
-| 9 | Step 2 has file upload with image preview and 5MB validation | Upload an image — preview appears |
-| 10 | Step 3 validates card number (16 digits), expiry (MM/YY), CVV (3 digits) | Enter short card number — error shows |
-| 11 | Step 4 shows booking summary | All entered data visible in confirmation |
-| 12 | `ListingCard` tests: title, price, badge, toggle — all pass | `npm test` — all green |
-| 13 | Search filter tests pass | `npm test` — filter tests green |
-| 14 | API mock tests: loading, success, error — all pass | `npm test` — API tests green |
-| 15 | Booking form validation tests pass | `npm test` — form tests green |
-| 16 | No TypeScript errors | `npm run build` passes |
+| 1 | `axios` instance created with base URL and interceptors | Check `src/lib/axios.ts` |
+| 2 | `QueryClientProvider` + `ReactQueryDevtools` in `main.tsx` | DevTools panel visible in browser |
+| 3 | `useListings` uses `useQuery` with axios | React Query DevTools shows cache entry |
+| 4 | Listings load with `isLoading` spinner, `isError` retry button | Disconnect network — error state shows |
+| 5 | `useToggleSaved` optimistic update — UI updates instantly | Toggle heart — instant UI change |
+| 6 | Optimistic update rolls back on error | Mock failed mutation — state reverts |
+| 7 | Zod schemas defined for all 3 form steps | `src/schemas/booking.ts` has 3 schemas |
+| 8 | `react-hook-form` + Zod resolver used on each step | No manual `useState` for form fields |
+| 9 | Inline validation errors shown per field | Leave check-in empty — error message shows |
+| 10 | Booking form has 4 steps with step indicators | All 4 steps navigable |
+| 11 | Step 2 has file upload with image preview and 5MB validation | Upload image — preview appears |
+| 12 | Step 4 shows full booking summary | All entered data visible in confirmation |
+| 13 | `ListingCard` tests all pass | `npm test` — all green |
+| 14 | Search filter tests pass | `npm test` — filter tests green |
+| 15 | API mock tests pass | `npm test` — API tests green |
+| 16 | Booking form validation tests pass | `npm test` — form tests green |
+| 17 | No TypeScript errors | `npm run build` passes |
 
 ---
 
 ## Submission Checklist
 
-- [ ] All 16 acceptance criteria pass
+- [ ] All 17 acceptance criteria pass
 - [ ] `npm test` — all tests green
 - [ ] `npm run build` — zero TypeScript errors
+- [ ] `axios`, `@tanstack/react-query`, `zod`, `react-hook-form`, `@hookform/resolvers` all used
 - [ ] Optimistic update confirmed working
 - [ ] File upload shows preview
-- [ ] All 4 form steps validate before advancing
-- [ ] Test files in `src/tests/` — not mixed with source files
+- [ ] All 4 form steps validate with Zod before advancing
+- [ ] Test files in `src/tests/`
