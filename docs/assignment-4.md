@@ -1,12 +1,12 @@
-# Assignment 4: Bookings Feature, Data Fetching & Tests
+# Assignment 4: Bookings Feature & Data Fetching
 
 ## Description
 
 In the previous phases, data was hardcoded and loaded from a local array. Real apps fetch data from an API. In this assignment you will replace the simulated data loading with **TanStack Query** — the industry standard for server state management in React. You will also add the **bookings feature**: a 4-step form that walks the user through selecting dates, entering personal info, entering payment details, and confirming the booking.
 
-The bookings feature introduces two important concepts: **form validation with Zod** (define your validation rules as a schema, get TypeScript types for free) and **react-hook-form** (manage form state with minimal re-renders). You will also write a full test suite — unit tests for components, integration tests for the search filter, mock API tests, and form validation tests.
+The bookings feature introduces two important concepts: **form validation with Zod** (define your validation rules as a schema, get TypeScript types for free) and **react-hook-form** (manage form state with minimal re-renders).
 
-By the end of this assignment, the app fetches real data, handles loading and error states gracefully, has a complete booking flow, and has a test suite that proves everything works.
+By the end of this assignment, the app fetches real data, handles loading and error states gracefully, and has a complete booking flow.
 
 ---
 
@@ -42,7 +42,6 @@ Read the Zod docs and understand `z.object`, `z.string`, `z.number`, `.min`, `.m
 
 ```bash
 npm install @tanstack/react-query @tanstack/react-query-devtools zod react-hook-form @hookform/resolvers axios
-npm install -D vitest @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
 ```
 
 ---
@@ -73,11 +72,6 @@ src/
 │       └── index.ts
 ├── lib/
 │   └── axios.ts
-├── tests/
-│   ├── ListingCard.test.tsx
-│   ├── SearchFilter.test.tsx
-│   ├── BookingForm.test.tsx
-│   └── api.test.tsx
 ├── App.tsx
 └── main.tsx
 ```
@@ -124,21 +118,6 @@ Create `src/features/bookings/components/BookingForm.tsx`. This component uses `
 ### 11. Add Booking Entry Point to ListingDetail
 Add a "Book Now" button to `ListingDetail`. When clicked, show the `BookingForm`. Export `BookingForm` through `src/features/bookings/index.ts`.
 
-### 12. Configure Vitest
-Update `vite.config.ts` to add a `test` config block with `environment: 'jsdom'`, `globals: true`, and `setupFiles: './src/test-setup.ts'`. Create `src/test-setup.ts` that imports `@testing-library/jest-dom` to add custom matchers like `toBeInTheDocument`.
-
-### 13. Write ListingCard Tests
-Create `src/tests/ListingCard.test.tsx`. Write tests that: render a listing and assert the title appears in the document, render a listing and assert the price appears, render with `superhost: true` and assert the Superhost badge is visible, render with `superhost: false` and assert the badge is not there, and simulate a click on the heart button and assert `onToggleSave` was called exactly once.
-
-### 14. Write SearchFilter Tests
-Create `src/tests/SearchFilter.test.tsx`. Write tests that: render all 6 listings with an empty query, type a title into the search and assert only matching listings appear, type a location and assert only matching listings appear, type something that matches nothing and assert the empty state message appears.
-
-### 15. Write API Mock Tests
-Create `src/tests/api.test.tsx`. Use `vi.mock` to mock the axios instance. Write tests that: mock a pending request and assert the spinner is visible, mock a successful response and assert listings render, mock an error response and assert the error message appears.
-
-### 16. Write BookingForm Validation Tests
-Create `src/tests/BookingForm.test.tsx`. Write tests that: submit Step 1 with all fields empty and assert validation error messages appear, fill in valid Step 1 data and assert the form advances to Step 2, enter a check-out date before check-in and assert the cross-field validation error appears.
-
 ---
 
 ## Acceptance Criteria
@@ -158,19 +137,14 @@ Create `src/tests/BookingForm.test.tsx`. Write tests that: submit Step 1 with al
 | 11 | Booking form has 4 steps with step indicators |
 | 12 | Step 2 has file upload with image preview and 5MB validation |
 | 13 | Step 4 shows full booking summary |
-| 14 | All ListingCard tests pass |
-| 15 | All SearchFilter tests pass |
-| 16 | All API mock tests pass |
-| 17 | All BookingForm validation tests pass |
-| 18 | Bookings feature exports through `src/features/bookings/index.ts` |
-| 19 | `npm run build` passes with zero TypeScript errors |
+| 14 | Bookings feature exports through `src/features/bookings/index.ts` |
+| 15 | `npm run build` passes with zero TypeScript errors |
 
 ---
 
 ## Submission Checklist
 
-- [ ] All 19 acceptance criteria pass
-- [ ] `npm test` — all tests green
+- [ ] All 15 acceptance criteria pass
 - [ ] `npm run build` — zero TypeScript errors
 - [ ] Bookings feature is self-contained under `src/features/bookings/`
 - [ ] Axios instance in `src/lib/` — not inside a feature

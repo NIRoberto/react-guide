@@ -77,41 +77,25 @@ src/
 
 ## Tasks
 
-### 1. Build the Global Store — Types
-Create `src/store/types.ts`. Define a `State` interface with four fields: `listings` (array of Listing), `loading` (boolean), `filter` (string), and `saved` (array of numbers — listing IDs). Define an `Action` discriminated union with four types: `SET_LISTINGS` (payload: Listing[]), `SET_LOADING` (payload: boolean), `SET_FILTER` (payload: string), and `TOGGLE_FAVORITE` (payload: number — the listing ID). Export both types.
+### 1. Build the Global Store
+**Purpose:** Replace scattered `useState` calls with a single source of truth so any component can read or update shared state without passing props through layers.
 
-### 2. Build the Global Store — Reducer
-Create `src/store/reducer.ts`. Export a pure reducer function that takes `(state: State, action: Action)` and returns a new State. Handle all four action types. For `TOGGLE_FAVORITE`, check if the ID is already in the `saved` array — if yes, remove it; if no, add it. Never mutate state — always return a new object or array.
+Create `src/store/types.ts` with a `State` interface (`listings`, `loading`, `filter`, `saved`) and an `Action` discriminated union with four types: `SET_LISTINGS`, `SET_LOADING`, `SET_FILTER`, `TOGGLE_FAVORITE`. Create `src/store/reducer.ts` as a pure function — never mutate state, always return a new object. Create `src/store/StoreContext.tsx` with a `StoreProvider` using `useReducer` and a `useStore` hook that throws if used outside the provider.
 
-### 3. Build the Global Store — Context
-Create `src/store/StoreContext.tsx`. Use `createContext` to create a context that holds `{ state: State, dispatch: Dispatch<Action> }`. Build a `StoreProvider` component that uses `useReducer` with your reducer and an initial state (empty listings, loading true, empty filter, empty saved). Export a `useStore` hook that calls `useContext` and throws an error if used outside the provider.
+### 2. Wrap the App and Build the Shared Spinner
+**Purpose:** Make the store and toast system available to every component in the tree, and create a reusable loading indicator for async operations.
 
-### 4. Wrap the App with Providers
-In `main.tsx`, wrap `<App />` with `<StoreProvider>`. Also add `<Toaster position="bottom-right" />` from `react-hot-toast` so toasts appear in the bottom-right corner.
+In `main.tsx`, wrap `<App />` with `<StoreProvider>` and add `<Toaster position="bottom-right" />` from `react-hot-toast`. Create `src/shared/components/Spinner.tsx` — a simple spinning indicator that will be shown while data is loading.
 
-### 5. Create the Shared Spinner
-Create `src/shared/components/Spinner.tsx`. This is a simple loading spinner — a spinning circle or three dots. It will be used while data is loading. Keep it simple.
+### 3. Build Custom Hooks and Refactor SearchBar
+**Purpose:** Extract data-fetching and favorites logic out of components into dedicated hooks so the page stays clean and logic is reusable.
 
-### 6. Build the useListings Hook
-Create `src/features/listings/hooks/useListings.ts`. This hook simulates an async data fetch. Use `useEffect` to dispatch `SET_LOADING` true, then after 1.5 seconds dispatch `SET_LISTINGS` with the mock data from `src/data/listings.ts`, then dispatch `SET_LOADING` false. Clean up the timer on unmount. This hook has no return value — it just triggers the side effect.
+Create `useListings.ts` — uses `useEffect` to simulate a 1.5s fetch, dispatches `SET_LOADING` true, then after the delay dispatches `SET_LISTINGS` and `SET_LOADING` false. Create `useFavorites.ts` — reads `saved` from the store, returns `toggle(id, title)`, `count`, and `isSaved(id)`. The `toggle` function dispatches `TOGGLE_FAVORITE` and shows a `react-hot-toast`. Update `SearchBar` to dispatch `SET_FILTER` to the store, add `useRef` auto-focus on mount, and wrap the dispatch in `lodash` `debounce` with 300ms delay.
 
-### 7. Build the useFavorites Hook
-Create `src/features/listings/hooks/useFavorites.ts`. This hook reads `saved` from the store via `useStore`. It returns an object with `toggle(id: number, title: string)`, `count` (number of saved listings), and `isSaved(id: number)` (boolean). The `toggle` function dispatches `TOGGLE_FAVORITE` and shows a toast — "Saved: {title}" if adding, "Removed: {title}" if removing.
+### 4. Refactor ListingsPage, Animate Cards, and Build the Saved Panel
+**Purpose:** Connect the page to the store, add visual polish with animations, and build the saved listings panel that proves global state works without prop drilling.
 
-### 8. Refactor SearchBar to Dispatch to Store
-Update `SearchBar` to dispatch `SET_FILTER` to the store instead of calling an `onChange` prop. Add `useRef` to auto-focus the input on mount. Wrap the dispatch call in `lodash` `debounce` with a 300ms delay — the filter should only update 300ms after the user stops typing, not on every keystroke.
-
-### 9. Refactor ListingsPage to Use the Store
-Update `ListingsPage` to call `useListings()` on mount (triggers the simulated fetch). Read `listings`, `loading`, and `filter` from the store via `useStore`. Compute the filtered listings and wrap the computation in `useMemo` so it only recalculates when `listings` or `filter` changes. Show `<Spinner />` while `loading` is true. Use `useFavorites` for the save/unsave logic.
-
-### 10. Animate ListingCard with Framer Motion
-Wrap the root element of `ListingCard` with `motion.div` from `framer-motion`. Set `initial={{ opacity: 0, y: 20 }}` and `animate={{ opacity: 1, y: 0 }}`. Each card should fade in and slide up on mount.
-
-### 11. Convert ListingCard to CSS Modules
-Rename `ListingCard.css` to `ListingCard.module.css`. Import it as `import styles from './ListingCard.module.css'` and use `styles.card`, `styles.title`, etc. Add a hover lift effect — when you hover a card, it should lift slightly with a shadow. Add distinct styling for superhost cards — maybe a gold border or background tint.
-
-### 12. Build the SavedListings Panel
-Create `src/features/listings/components/SavedListings.tsx`. This component reads `saved` IDs from the store, finds the corresponding listings, and displays them in a panel with title, location, and price. Use `@headlessui/react` `Transition` to animate the panel sliding in from the right when it opens.
+Update `ListingsPage` to call `useListings()` on mount, read from the store via `useStore`, wrap the filtered computation in `useMemo`, and show `<Spinner />` while loading. Wrap `ListingCard`'s root element with `motion.div` from `framer-motion` — animate from `opacity: 0, y: 20` to `opacity: 1, y: 0`. Convert `ListingCard.css` to CSS Modules and add a hover lift effect with distinct superhost styling. Create `SavedListings.tsx` that reads saved IDs from the store and uses `@headlessui/react` `Transition` to animate the panel sliding in.
 
 ---
 

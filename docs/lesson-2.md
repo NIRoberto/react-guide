@@ -106,6 +106,55 @@ npm run dev
 # watch the loading state appear for 1.5s then listings render
 ```
 
+### Examples
+
+**Example 1 — Log every time count changes:**
+```tsx
+import { useState, useEffect } from 'react'
+
+export function Counter() {
+  const [count, setCount] = useState(0)
+
+  useEffect(() => {
+    console.log(`Count changed to: ${count}`)
+  }, [count])
+
+  return <button onClick={() => setCount(c => c + 1)}>Count: {count}</button>
+}
+```
+```
+// Console output when you click the button:
+Count changed to: 0   ← on mount
+Count changed to: 1   ← after first click
+Count changed to: 2   ← after second click
+```
+
+**Example 2 — Fetch user data when userId changes:**
+```tsx
+import { useState, useEffect } from 'react'
+
+export function UserProfile({ userId }: { userId: number }) {
+  const [name, setName] = useState('')
+
+  useEffect(() => {
+    console.log(`Fetching user ${userId}...`)
+    // Simulated fetch
+    setTimeout(() => setName(`User #${userId}`), 500)
+  }, [userId])
+
+  return <p>{name || 'Loading...'}</p>
+}
+```
+```
+// UI output:
+// userId=1 → shows "Loading..." → then "User #1"
+// userId=2 → shows "Loading..." → then "User #2"
+
+// Console:
+Fetching user 1...
+Fetching user 2...
+```
+
 ### Common useEffect mistakes
 
 ```tsx
@@ -201,6 +250,62 @@ export function Timer() {
 }
 ```
 
+### Examples
+
+**Example 1 — Track how many times a component re-renders (without causing more renders):**
+```tsx
+import { useState, useRef, useEffect } from 'react'
+
+export function RenderCounter() {
+  const [text, setText] = useState('')
+  const renderCount = useRef(0)
+
+  useEffect(() => {
+    renderCount.current += 1
+  })
+
+  return (
+    <div>
+      <input value={text} onChange={e => setText(e.target.value)} />
+      <p>Renders: {renderCount.current}</p>
+    </div>
+  )
+}
+```
+```
+// UI output as you type "hi":
+// Input: "h"  → Renders: 1
+// Input: "hi" → Renders: 2
+// (renderCount.current updates silently — no extra re-render triggered)
+```
+
+**Example 2 — Store previous value:**
+```tsx
+import { useState, useRef, useEffect } from 'react'
+
+export function PriceTracker() {
+  const [price, setPrice] = useState(100)
+  const prevPrice = useRef(100)
+
+  useEffect(() => {
+    prevPrice.current = price
+  }, [price])
+
+  return (
+    <div>
+      <p>Current: ${price}  |  Previous: ${prevPrice.current}</p>
+      <button onClick={() => setPrice(p => p + 10)}>+$10</button>
+    </div>
+  )
+}
+```
+```
+// UI output:
+// Start:       Current: $100  |  Previous: $100
+// After click: Current: $110  |  Previous: $100
+// After click: Current: $120  |  Previous: $110
+```
+
 **Key difference from useState:** `ref.current = newValue` does NOT trigger a re-render. `setState(newValue)` DOES. Use `useRef` when you need to remember something but the UI doesn't depend on it.
 
 ---
@@ -291,6 +396,68 @@ export function HeartButton({ id }: { id: number }) {
     </button>
   )
 }
+```
+
+### Examples
+
+**Example 1 — Theme context (dark/light mode):**
+```tsx
+import { createContext, useContext, useState } from 'react'
+
+const ThemeContext = createContext<'light' | 'dark'>('light')
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  return (
+    <ThemeContext.Provider value={theme}>
+      {children}
+      <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}>
+        Toggle
+      </button>
+    </ThemeContext.Provider>
+  )
+}
+
+function Page() {
+  const theme = useContext(ThemeContext)
+  return <div style={{ background: theme === 'dark' ? '#222' : '#fff' }}>Hello</div>
+}
+```
+```
+// UI output:
+// Click "Toggle" → background switches between white and dark gray
+// No props passed — Page reads theme directly from context
+```
+
+**Example 2 — Cart count badge (any component reads it):**
+```tsx
+const CartContext = createContext({ count: 0, add: () => {} })
+
+export function CartProvider({ children }: { children: React.ReactNode }) {
+  const [count, setCount] = useState(0)
+  return (
+    <CartContext.Provider value={{ count, add: () => setCount(c => c + 1) }}>
+      {children}
+    </CartContext.Provider>
+  )
+}
+
+function CartBadge() {
+  const { count } = useContext(CartContext)
+  return <span>🛒 {count}</span>   // reads from context, no props needed
+}
+
+function AddButton() {
+  const { add } = useContext(CartContext)
+  return <button onClick={add}>Add to cart</button>
+}
+```
+```
+// UI output:
+// Start:       🛒 0
+// After click: 🛒 1
+// After click: 🛒 2
+// CartBadge and AddButton share state with zero prop drilling
 ```
 
 **Run it:**
@@ -398,6 +565,81 @@ export default function App() {
 }
 ```
 
+### Examples
+
+**Example 1 — Simple counter with named actions:**
+```tsx
+import { useReducer } from 'react'
+
+type Action = { type: 'INCREMENT' } | { type: 'DECREMENT' } | { type: 'RESET' }
+
+function reducer(state: number, action: Action): number {
+  switch (action.type) {
+    case 'INCREMENT': return state + 1
+    case 'DECREMENT': return state - 1
+    case 'RESET':     return 0
+    default:          return state
+  }
+}
+
+export function Counter() {
+  const [count, dispatch] = useReducer(reducer, 0)
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => dispatch({ type: 'INCREMENT' })}>+</button>
+      <button onClick={() => dispatch({ type: 'DECREMENT' })}>-</button>
+      <button onClick={() => dispatch({ type: 'RESET' })}>Reset</button>
+    </div>
+  )
+}
+```
+```
+// UI output:
+// Start:          Count: 0
+// Click "+":      Count: 1
+// Click "+":      Count: 2
+// Click "-":      Count: 1
+// Click "Reset":  Count: 0
+```
+
+**Example 2 — Form state with multiple fields:**
+```tsx
+import { useReducer } from 'react'
+
+type FormState = { name: string; email: string; submitted: boolean }
+type FormAction =
+  | { type: 'SET_FIELD'; field: 'name' | 'email'; value: string }
+  | { type: 'SUBMIT' }
+
+function reducer(state: FormState, action: FormAction): FormState {
+  switch (action.type) {
+    case 'SET_FIELD': return { ...state, [action.field]: action.value }
+    case 'SUBMIT':    return { ...state, submitted: true }
+    default:          return state
+  }
+}
+
+export function BookingForm() {
+  const [form, dispatch] = useReducer(reducer, { name: '', email: '', submitted: false })
+
+  if (form.submitted) return <p>Booked for {form.name}!</p>
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); dispatch({ type: 'SUBMIT' }) }}>
+      <input placeholder="Name"  onChange={e => dispatch({ type: 'SET_FIELD', field: 'name',  value: e.target.value })} />
+      <input placeholder="Email" onChange={e => dispatch({ type: 'SET_FIELD', field: 'email', value: e.target.value })} />
+      <button type="submit">Book</button>
+    </form>
+  )
+}
+```
+```
+// UI output:
+// Type "Alice" in Name, "alice@email.com" in Email, click Book
+// → Form disappears, shows: "Booked for Alice!"
+```
+
 **Benefit of named actions:** When you read `dispatch({ type: 'TOGGLE_FAVORITE', payload: id })`, you immediately understand what's happening. Compare to `setSaved(prev => prev.includes(id) ? ...)` — the intent is less clear.
 
 ---
@@ -470,6 +712,71 @@ function ListingsPage() {
     </div>
   )
 }
+```
+
+### Examples
+
+**Example 1 — useMemo to filter a list:**
+```tsx
+import { useState, useMemo } from 'react'
+
+const items = ['Tokyo', 'Paris', 'New York', 'London', 'Sydney']
+
+export function CitySearch() {
+  const [query, setQuery] = useState('')
+
+  const results = useMemo(() => {
+    console.log('Filtering...')  // only logs when query changes
+    return items.filter(city => city.toLowerCase().includes(query.toLowerCase()))
+  }, [query])
+
+  return (
+    <div>
+      <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search city" />
+      <ul>{results.map(c => <li key={c}>{c}</li>)}</ul>
+    </div>
+  )
+}
+```
+```
+// Console + UI output:
+// Type "o" → Filtering... → shows: Tokyo, London, New York
+// Type "on" → Filtering... → shows: London
+// (no re-filter on unrelated re-renders)
+```
+
+**Example 2 — useCallback to prevent child re-renders:**
+```tsx
+import { useState, useCallback, memo } from 'react'
+
+// memo: only re-renders if props change
+const SaveButton = memo(({ onSave }: { onSave: () => void }) => {
+  console.log('SaveButton rendered')
+  return <button onClick={onSave}>Save</button>
+})
+
+export function ListingCard({ id }: { id: number }) {
+  const [count, setCount] = useState(0)
+
+  // Without useCallback: new function every render → SaveButton always re-renders
+  // With useCallback: same function reference → SaveButton skips re-render
+  const handleSave = useCallback(() => {
+    console.log(`Saved listing ${id}`)
+  }, [id])
+
+  return (
+    <div>
+      <button onClick={() => setCount(c => c + 1)}>Clicks: {count}</button>
+      <SaveButton onSave={handleSave} />
+    </div>
+  )
+}
+```
+```
+// Console output:
+// Initial render:       SaveButton rendered
+// Click "Clicks" btn:   (nothing — SaveButton skips re-render ✓)
+// Without useCallback:  SaveButton rendered  ← would fire on every click
 ```
 
 **Rule of thumb:** Use `useCallback` when passing a function to a `React.memo`-wrapped child. Otherwise, it's premature optimization.
