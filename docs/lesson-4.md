@@ -1,92 +1,94 @@
 # Phase 4: Real-World Skills
 
 ## Table of Contents
-1. [Fetch API Basics](#fetch-api-basics)
-2. [TanStack Query (React Query)](#tanstack-query-react-query)
-3. [useQuery](#usequery)
-4. [useMutation & Optimistic Updates](#usemutation--optimistic-updates)
-5. [Controlled vs Uncontrolled Forms](#controlled-vs-uncontrolled-forms)
-6. [Multi-Step Forms](#multi-step-forms)
-7. [Form Validation](#form-validation)
-8. [File Upload with Preview](#file-upload-with-preview)
-9. [Assignment](#assignment)
+1. [Fetch API — The Right Way](#fetch-api--the-right-way)
+2. [TanStack Query Setup](#tanstack-query-setup)
+3. [useQuery — Deep Dive](#usequery--deep-dive)
+4. [useMutation — Deep Dive](#usemutation--deep-dive)
+5. [Zod — Schema Validation](#zod--schema-validation)
+6. [react-hook-form + Zod](#react-hook-form--zod)
+7. [Assignment](#assignment)
 
 ---
 
-## Fetch API Basics
+## Fetch API — The Right Way
 
-The Fetch API is built into the browser. It returns a Promise that resolves to a `Response` object. You must check `response.ok` manually — Fetch does NOT throw on HTTP errors like 404 or 500, only on network failures.
+`fetch` is built into the browser. It returns a Promise that resolves to a `Response` object. The most important thing to know: **fetch only throws on network failure** — not on 404, 500, or any HTTP error. You must check `response.ok` yourself.
 
-```tsx
-// Basic GET request
-async function fetchListings() {
-  const response = await fetch('https://api.example.com/listings')
+```ts
+// src/lib/api.ts — one shared fetch wrapper used by the whole app
+const BASE_URL = import.meta.env.VITE_API_URL  // e.g. https://api.example.com
 
-  // Fetch only throws on network errors (no internet, DNS failure)
-  // HTTP errors (404, 500) resolve normally — you must check response.ok
-  if (!response.ok) {
-    throw new Error(`HTTP error: ${response.status}`)
-  }
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('token')
 
-  const data = await response.json()
-  return data
-}
-
-// POST request with JSON body
-async function createBooking(booking: BookingData) {
-  const response = await fetch('https://api.example.com/bookings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(booking),
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
   })
 
-  if (!response.ok) throw new Error('Failed to create booking')
-  return response.json()
+  if (res.status === 401) {
+    localStorage.removeItem('token')
+    window.location.href = '/login'
+  }
+
+  if (!res.ok) {
+    // Parse the error body if the server sends one
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.message ?? `HTTP ${res.status}`)
+  }
+
+  return res.json()
 }
 
-// Using fetch in a component with useEffect
-function ListingsPage() {
-  const [listings, setListings] = useState<Listing[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetchListings()
-      .then(setListings)
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [])
-
-  if (loading) return <Spinner />
-  if (error) return <p>Error: {error}</p>
-  return <ListingsGrid listings={listings} />
+// Convenience methods
+export const api = {
+  get:    <T>(path: string)                  => request<T>(path),
+  post:   <T>(path: string, body: unknown)   => request<T>(path, { method: 'POST',   body: JSON.stringify(body) }),
+  put:    <T>(path: string, body: unknown)   => request<T>(path, { method: 'PUT',    body: JSON.stringify(body) }),
+  delete: <T>(path: string)                  => request<T>(path, { method: 'DELETE' }),
 }
 ```
 
-**The problem with manual fetch:** Every data-fetching component needs to manage `loading`, `error`, and `data` state manually. There's no caching — navigating away and back re-fetches the same data. There's no deduplication — two components fetching the same endpoint make two requests. TanStack Query solves all of this.
+Now every API call in the app goes through `api.get(...)`, `api.post(...)` etc. Auth headers and error handling are handled once, not repeated everywhere.
+
+### Why Not Raw fetch Everywhere?
+
+```ts
+// ❌ repeated in every file — error handling, auth, base URL all duplicated
+const res = await fetch('https://api.example.com/listings', {
+  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+})
+if (!res.ok) throw new Error(`HTTP ${res.status}`)
+const data = await res.json()
+
+// ✅ one line, consistent everywhere
+const data = await api.get<Listing[]>('/listings')
+```
 
 ---
 
-## TanStack Query (React Query)
+## TanStack Query Setup
 
-TanStack Query is a server state management library. It handles caching, background refetching, deduplication, loading/error states, and more — automatically.
-
-**Server state vs client state:**
-- **Client state** — UI state that lives only in the browser (modal open/closed, form input values). Use `useState` or Zustand.
-- **Server state** — data that lives on the server and is fetched over the network (listings, user profile, bookings). Use TanStack Query.
+TanStack Query manages **server state** — data that lives on the server and is fetched over the network. It handles caching, background refetching, deduplication, and loading/error states automatically.
 
 ```bash
-npm install @tanstack/react-query
+npm install @tanstack/react-query @tanstack/react-query-devtools
 ```
 
 ```tsx
-// main.tsx — wrap your app in QueryClientProvider
+// main.tsx
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,  // data stays "fresh" for 5 minutes — no refetch during this window
+      staleTime: 5 * 60 * 1000,  // data is "fresh" for 5 min — no refetch during this window
       retry: 2,                   // retry failed requests twice before showing an error
     },
   },
@@ -95,404 +97,502 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>
     <App />
+    <ReactQueryDevtools initialIsOpen={false} />
   </QueryClientProvider>
 )
 ```
 
-### What TanStack Query Gives You
+`ReactQueryDevtools` adds a panel in the browser where you can see every cache entry, its status (fresh / stale / fetching), and manually trigger refetches. Use it constantly while building.
 
-| Feature | Without TQ | With TQ |
-|---------|-----------|---------| 
-| Loading state | Manual `useState` | Automatic `isLoading` |
-| Error state | Manual `useState` | Automatic `isError` |
-| Caching | None | Automatic, configurable |
-| Background refetch | Manual | Automatic on window focus |
-| Deduplication | None | Automatic |
-| Optimistic updates | Complex | Built-in pattern |
+### Server State vs Client State
 
----
-
-## useQuery
-
-`useQuery` fetches and caches data. The `queryKey` is the cache key — TanStack Query uses it to identify, cache, and invalidate data. Think of it as the unique name for a piece of server data.
-
-```tsx
-import { useQuery } from '@tanstack/react-query'
-
-// Define your fetch function separately — keeps components clean
-const fetchListings = () =>
-  fetch('/api/listings').then(r => {
-    if (!r.ok) throw new Error('Failed to fetch')
-    return r.json()
-  })
-
-const fetchListing = (id: number) =>
-  fetch(`/api/listings/${id}`).then(r => r.json())
-
-function ListingsPage() {
-  const {
-    data: listings,
-    isLoading,    // true only on the first fetch (no cached data yet)
-    isError,
-    error,
-    refetch,
-    isFetching,  // true during ANY fetch, including background refetches
-  } = useQuery({
-    queryKey: ['listings'],           // unique cache key
-    queryFn: fetchListings,
-    staleTime: 5 * 60 * 1000,        // don't refetch for 5 minutes
-  })
-
-  if (isLoading) return <Spinner />
-  if (isError) return (
-    <div>
-      <p>Error: {(error as Error).message}</p>
-      <button onClick={() => refetch()}>Retry</button>
-    </div>
-  )
-
-  return (
-    <div>
-      {/* isFetching is true during background refetch — show a subtle indicator */}
-      {isFetching && <p className="refetch-indicator">Refreshing...</p>}
-      <ListingsGrid listings={listings} />
-    </div>
-  )
-}
-
-// Dynamic query — queryKey includes the id, so each listing has its own cache entry
-function ListingDetail({ id }: { id: number }) {
-  const { data: listing, isLoading } = useQuery({
-    queryKey: ['listing', id],        // ['listing', 1], ['listing', 2], etc.
-    queryFn: () => fetchListing(id),
-    enabled: !!id,                    // only run when id is truthy
-  })
-
-  if (isLoading) return <Spinner />
-  return <div>{listing?.title}</div>
-}
-```
-
-**Caching behavior:** When you navigate away from a page and come back, TanStack Query shows the cached data immediately (no loading spinner) while refetching in the background. This makes navigation feel instant.
+| | Client State | Server State |
+|---|---|---|
+| What | UI state — modal open, form values | Data from the server — listings, bookings |
+| Tool | `useState`, `useReducer` | TanStack Query |
+| Persists | Browser memory only | Server — must be fetched |
+| Stale? | Never | Yes — can go out of date |
 
 ---
 
-## useMutation & Optimistic Updates
+## useQuery — Deep Dive
 
-`useMutation` handles write operations — creating, updating, or deleting data. Unlike `useQuery`, mutations don't run automatically — you call `mutate()` to trigger them.
+`useQuery` fetches data and puts it in the cache. Every query has a `queryKey` (the cache identifier) and a `queryFn` (the async function that fetches the data).
+
+### The queryKey
+
+The `queryKey` is an array. TanStack Query uses it to:
+- Store the result in the cache
+- Decide when to refetch (when the key changes)
+- Let you invalidate specific entries
+
+```ts
+queryKey: ['listings']              // all listings
+queryKey: ['listing', id]           // one listing — separate cache entry per id
+queryKey: ['listings', { category }] // filtered listings — separate cache per filter
+```
+
+When a variable is in the key, the query automatically re-runs when that variable changes — just like a `useEffect` dependency array.
+
+### All the Options
+
+```ts
+const query = useQuery({
+  queryKey: ['listings'],
+  queryFn: () => api.get<Listing[]>('/listings'),
+
+  staleTime: 5 * 60 * 1000,   // how long data is considered fresh (no background refetch)
+  gcTime: 10 * 60 * 1000,     // how long unused cache data is kept in memory (default 5 min)
+  retry: 3,                    // how many times to retry on failure
+  retryDelay: attempt => Math.min(1000 * 2 ** attempt, 30000),  // exponential backoff
+  refetchOnWindowFocus: true,  // refetch when user tabs back to the app (default: true)
+  refetchInterval: 30_000,     // poll every 30 seconds (useful for live data)
+  enabled: true,               // set to false to pause the query
+  placeholderData: [],         // shown while loading — no spinner, but not real data
+  initialData: cachedListings, // treat existing data as the initial cache value
+  select: data => data.filter(l => l.available),  // transform data before it reaches the component
+})
+```
+
+### All the Return Values
+
+```ts
+const {
+  data,           // the resolved value from queryFn — undefined until first success
+  isLoading,      // true only on the FIRST fetch (no cached data yet)
+  isFetching,     // true during ANY fetch — first load OR background refetch
+  isSuccess,      // true when data is available
+  isError,        // true when the last fetch failed
+  error,          // the Error object thrown by queryFn
+  refetch,        // manually trigger a refetch
+  isStale,        // true when data is older than staleTime
+  isPending,      // alias for isLoading in v5
+  status,         // 'pending' | 'success' | 'error'
+  fetchStatus,    // 'fetching' | 'paused' | 'idle'
+} = useQuery({ queryKey: ['listings'], queryFn: ... })
+```
+
+### isLoading vs isFetching
+
+```
+First load:          isLoading=true   isFetching=true
+Background refetch:  isLoading=false  isFetching=true   ← data is shown, subtle indicator only
+Idle (fresh data):   isLoading=false  isFetching=false
+```
 
 ```tsx
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+if (isLoading) return <Spinner />                          // full-page spinner — first load only
+if (isError)   return <p>Error: {(error as Error).message}</p>
 
-function useCreateBooking() {
-  const queryClient = useQueryClient()
+return (
+  <div>
+    {isFetching && <div className="refetch-bar">Refreshing…</div>}  {/* subtle top bar */}
+    <ListingsGrid listings={data} />
+  </div>
+)
+```
 
-  return useMutation({
-    mutationFn: (booking: BookingData) =>
-      fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(booking),
-      }).then(r => r.json()),
+### Dependent Queries
 
-    onSuccess: () => {
-      // Tell TanStack Query that the 'listings' cache is now stale
-      // It will refetch listings on the next render that uses useQuery(['listings'])
-      queryClient.invalidateQueries({ queryKey: ['listings'] })
-    },
-  })
+Run a query only when another query's data is ready:
+
+```ts
+const { data: user } = useQuery({
+  queryKey: ['user'],
+  queryFn: () => api.get<User>('/me'),
+})
+
+const { data: bookings } = useQuery({
+  queryKey: ['bookings', user?.id],
+  queryFn: () => api.get<Booking[]>(`/users/${user!.id}/bookings`),
+  enabled: !!user,   // ← only runs after user is loaded
+})
+```
+
+### Parallel Queries
+
+Just call `useQuery` multiple times — they run in parallel automatically:
+
+```ts
+const listingsQuery = useQuery({ queryKey: ['listings'], queryFn: fetchListings })
+const savedQuery    = useQuery({ queryKey: ['saved'],    queryFn: fetchSaved })
+
+// Both fire at the same time, no waterfall
+```
+
+### The `select` Option — Transform Without Extra State
+
+Instead of deriving data with `useMemo`, use `select` to transform the raw API response before it reaches the component. The transformed result is memoized — it only recomputes when the raw data changes.
+
+```ts
+// Raw API returns all listings — component only wants beach listings
+const { data: beachListings } = useQuery({
+  queryKey: ['listings'],
+  queryFn: () => api.get<Listing[]>('/listings'),
+  select: data => data.filter(l => l.category === 'beach'),
+})
+
+// Multiple components can use the same queryKey with different selects
+// They share ONE network request but each gets their own transformed slice
+const { data: count } = useQuery({
+  queryKey: ['listings'],
+  queryFn: () => api.get<Listing[]>('/listings'),
+  select: data => data.length,   // this component only cares about the count
+})
+```
+
+### placeholderData — Instant Navigation
+
+Show previous data while new data loads — no spinner, no layout shift:
+
+```ts
+import { keepPreviousData } from '@tanstack/react-query'
+
+const { data, isPlaceholderData } = useQuery({
+  queryKey: ['listings', { page }],
+  queryFn: () => api.get<Listing[]>(`/listings?page=${page}`),
+  placeholderData: keepPreviousData,  // show page 1 data while page 2 loads
+})
+
+// Dim the grid while new page loads
+<div style={{ opacity: isPlaceholderData ? 0.5 : 1 }}>
+  <ListingsGrid listings={data} />
+</div>
+```
+
+### Prefetching
+
+Load data before the user navigates to it — so the page feels instant:
+
+```ts
+// Prefetch on hover — by the time they click, data is already cached
+const queryClient = useQueryClient()
+
+<Link
+  to={`/listings/${id}`}
+  onMouseEnter={() =>
+    queryClient.prefetchQuery({
+      queryKey: ['listing', id],
+      queryFn: () => api.get<Listing>(`/listings/${id}`),
+    })
+  }
+>
+  View listing
+</Link>
+```
+
+---
+
+## useMutation — Deep Dive
+
+`useMutation` handles write operations — POST, PUT, DELETE. Unlike `useQuery`, it doesn't run automatically. You call `mutate()` or `mutateAsync()` to trigger it.
+
+### All the Options
+
+```ts
+const mutation = useMutation({
+  mutationFn: (data: BookingData) => api.post<Booking>('/bookings', data),
+
+  onMutate:  (variables) => { /* runs before the request — use for optimistic updates */ },
+  onSuccess: (data, variables, context) => { /* runs when request succeeds */ },
+  onError:   (error, variables, context) => { /* runs when request fails */ },
+  onSettled: (data, error, variables, context) => { /* runs on success OR error */ },
+
+  retry: 1,   // retry failed mutations once
+})
+```
+
+### All the Return Values
+
+```ts
+const {
+  mutate,          // fire and forget — mutate(variables)
+  mutateAsync,     // returns a Promise — await mutateAsync(variables)
+  isPending,       // true while the request is in flight
+  isSuccess,       // true after a successful mutation
+  isError,         // true after a failed mutation
+  error,           // the Error object
+  data,            // the response data from a successful mutation
+  reset,           // reset status back to idle
+} = useMutation({ mutationFn: ... })
+```
+
+### mutate vs mutateAsync
+
+```ts
+// mutate — fire and forget, handle results in callbacks
+mutation.mutate(bookingData)
+
+// mutateAsync — use when you need to await the result inline
+try {
+  const booking = await mutation.mutateAsync(bookingData)
+  navigate(`/bookings/${booking.id}`)   // use the response immediately
+} catch (err) {
+  console.error(err)
 }
 ```
 
-### Optimistic Updates
+### Cache Invalidation After Mutation
 
-An optimistic update immediately updates the UI as if the server request succeeded, then rolls back if it fails. This makes the app feel instant — no waiting for the server.
+After a write, tell TanStack Query which cached data is now stale so it refetches:
 
-```tsx
-function useToggleSaved() {
+```ts
+const queryClient = useQueryClient()
+
+const createBooking = useMutation({
+  mutationFn: (data: BookingData) => api.post('/bookings', data),
+  onSuccess: () => {
+    // Invalidate all queries whose key starts with 'bookings'
+    queryClient.invalidateQueries({ queryKey: ['bookings'] })
+
+    // Invalidate a specific listing (its availability changed)
+    queryClient.invalidateQueries({ queryKey: ['listing', listingId] })
+  },
+})
+```
+
+### Optimistic Updates — Full Pattern
+
+An optimistic update immediately updates the UI before the server responds, then rolls back if it fails. Three lifecycle hooks work together:
+
+```ts
+// src/features/listings/hooks/useToggleSaved.ts
+export function useToggleSaved() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (id: number) =>
-      fetch(`/api/saved/${id}`, { method: 'POST' }).then(r => r.json()),
+    mutationFn: (id: number) => api.post(`/saved/${id}`),
 
-    // Step 1: Immediately update the cache before the server responds
     onMutate: async (id) => {
-      // Cancel any in-flight refetches that might overwrite our optimistic update
+      // 1. Cancel any in-flight refetches — they could overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ['saved'] })
 
-      // Snapshot the current value for rollback
-      const previous = queryClient.getQueryData(['saved'])
+      // 2. Snapshot the current cache value so we can roll back
+      const previous = queryClient.getQueryData<number[]>(['saved'])
 
-      // Optimistically update the cache
-      queryClient.setQueryData(['saved'], (old: number[]) =>
-        old.includes(id) ? old.filter(x => x !== id) : [...old, id]
+      // 3. Apply the optimistic update immediately
+      queryClient.setQueryData<number[]>(['saved'], old =>
+        old?.includes(id) ? old.filter(x => x !== id) : [...(old ?? []), id]
       )
 
-      // Return snapshot so onError can roll back
+      // 4. Return the snapshot — onError receives it as `context`
       return { previous }
     },
 
-    // Step 2: If the server returns an error, roll back to the snapshot
     onError: (_err, _id, context) => {
-      queryClient.setQueryData(['saved'], context?.previous)
+      // 5. Roll back to the snapshot if the request failed
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(['saved'], context.previous)
+      }
     },
 
-    // Step 3: Whether success or error, sync with the server's actual state
     onSettled: () => {
+      // 6. Always sync with the server's real state after success or failure
       queryClient.invalidateQueries({ queryKey: ['saved'] })
     },
   })
 }
+```
 
-// Usage
-function ListingCard({ id }: { id: number }) {
+```tsx
+// Usage in a component
+function ListingCard({ listing }: { listing: Listing }) {
+  const { data: saved = [] } = useQuery({ queryKey: ['saved'], queryFn: fetchSaved })
   const toggleSaved = useToggleSaved()
 
+  const isSaved = saved.includes(listing.id)
+
   return (
-    <div>
-      <button
-        onClick={() => toggleSaved.mutate(id)}
-        disabled={toggleSaved.isPending}  // prevent double-clicks
-      >
-        {toggleSaved.isPending ? 'Saving...' : 'Save'}
-      </button>
-    </div>
+    <button
+      onClick={() => toggleSaved.mutate(listing.id)}
+      disabled={toggleSaved.isPending}
+      aria-label={isSaved ? 'Unsave' : 'Save'}
+    >
+      <FaHeart color={isSaved ? 'red' : 'gray'} />
+    </button>
   )
 }
 ```
 
----
+### setQueryData — Direct Cache Writes
 
-## Controlled vs Uncontrolled Forms
+Sometimes you already have the data from a mutation response — no need to refetch:
 
-### Controlled
+```ts
+const createListing = useMutation({
+  mutationFn: (data: NewListing) => api.post<Listing>('/listings', data),
 
-React state is the single source of truth. Every keystroke updates state, and the input's displayed value always matches state.
-
-```tsx
-function SearchForm() {
-  const [query, setQuery] = useState('')
-
-  return (
-    <input
-      value={query}                            // value tied to state
-      onChange={e => setQuery(e.target.value)} // state updates on every keystroke
-    />
-  )
-}
+  onSuccess: (newListing) => {
+    // Add the new listing directly into the cache — no extra network request
+    queryClient.setQueryData<Listing[]>(['listings'], old =>
+      old ? [...old, newListing] : [newListing]
+    )
+  },
+})
 ```
 
-**Advantages:** Full control — you can validate on every keystroke, format input (e.g., phone number masking), derive other values from it, and reset it by resetting state.
+### Global Mutation Callbacks
 
-### Uncontrolled
+Set default callbacks on the `QueryClient` for things like showing a toast on every error:
 
-The DOM manages the value. You read it with a ref when needed (e.g., on submit).
-
-```tsx
-function SearchForm() {
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const handleSubmit = () => {
-    console.log(inputRef.current?.value)  // read value on demand
-  }
-
-  return <input ref={inputRef} defaultValue="" />
-}
-```
-
-**Use controlled inputs** for most cases — they give you full control for validation, formatting, and derived state. Use uncontrolled only for file inputs (which can't be controlled) or when integrating with non-React libraries.
-
----
-
-## Multi-Step Forms
-
-Multi-step forms break a long form into smaller, focused steps. The key is managing which step is active and accumulating data across steps.
-
-```tsx
-const STEPS = ['Dates & Guests', 'Personal Info', 'Payment', 'Confirmation']
-
-function BookingForm() {
-  const [step, setStep] = useState(0)
-  const [data, setData] = useState({
-    checkIn: '', checkOut: '', guests: 1,
-    name: '', email: '', phone: '',
-    card: '', expiry: '', cvv: '',
-  })
-  const [errors, setErrors] = useState<Record<string, string>>({})
-
-  // Generic updater — updates any field and clears its error
-  const update = (field: string, value: string | number) => {
-    setData(d => ({ ...d, [field]: value }))
-    setErrors(e => ({ ...e, [field]: '' }))  // clear error on change
-  }
-
-  // Validate only the fields relevant to the current step
-  const validate = (): boolean => {
-    const e: Record<string, string> = {}
-    if (step === 0) {
-      if (!data.checkIn) e.checkIn = 'Check-in date is required'
-      if (!data.checkOut) e.checkOut = 'Check-out date is required'
-      if (data.checkIn && data.checkOut && data.checkIn >= data.checkOut)
-        e.checkOut = 'Check-out must be after check-in'
-    }
-    if (step === 1) {
-      if (!data.name.trim()) e.name = 'Name is required'
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) e.email = 'Valid email required'
-      if (data.phone.replace(/\D/g, '').length < 7) e.phone = 'Valid phone required'
-    }
-    if (step === 2) {
-      if (data.card.replace(/\s/g, '').length < 16) e.card = '16-digit card number required'
-      if (!/^\d{2}\/\d{2}$/.test(data.expiry)) e.expiry = 'Format: MM/YY'
-      if (data.cvv.length < 3) e.cvv = '3-digit CVV required'
-    }
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
-
-  // Only advance if the current step is valid
-  const next = () => { if (validate()) setStep(s => s + 1) }
-  const back = () => setStep(s => s - 1)
-
-  return (
-    <div>
-      {/* Step indicators */}
-      <div className="steps">
-        {STEPS.map((label, i) => (
-          <div key={i} className={`step ${i === step ? 'active' : ''} ${i < step ? 'done' : ''}`}>
-            {i + 1}. {label}
-          </div>
-        ))}
-      </div>
-
-      {step === 0 && (
-        <div>
-          <input type="date" value={data.checkIn} onChange={e => update('checkIn', e.target.value)} />
-          {errors.checkIn && <p className="error">{errors.checkIn}</p>}
-          <input type="date" value={data.checkOut} onChange={e => update('checkOut', e.target.value)} />
-          {errors.checkOut && <p className="error">{errors.checkOut}</p>}
-        </div>
-      )}
-
-      {step === 1 && (
-        <div>
-          <input value={data.name} onChange={e => update('name', e.target.value)} placeholder="Full name" />
-          {errors.name && <p className="error">{errors.name}</p>}
-          <input type="email" value={data.email} onChange={e => update('email', e.target.value)} />
-          {errors.email && <p className="error">{errors.email}</p>}
-        </div>
-      )}
-
-      <div className="form-actions">
-        {step > 0 && <button onClick={back}>Back</button>}
-        {step < STEPS.length - 1
-          ? <button onClick={next}>Continue</button>
-          : <button onClick={() => submitBooking(data)}>Confirm Booking</button>
-        }
-      </div>
-    </div>
-  )
-}
+```ts
+const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      toast.error((error as Error).message)
+    },
+  }),
+})
 ```
 
 ---
 
-## Form Validation
+## Zod — Schema Validation
 
-Manual validation works but gets repetitive. Zod is a TypeScript-first schema validation library — you define the shape and rules of your data once, and it validates and infers types automatically.
+Zod is a TypeScript-first schema validation library. Define your validation rules once as a schema — you get runtime validation AND TypeScript types from the same source.
 
-```tsx
-// Validation with Zod
+```bash
+npm install zod
+```
+
+```ts
+// src/features/bookings/schemas/booking.ts
 import { z } from 'zod'
 
-// Define the schema — this is both validation rules AND the TypeScript type
-const bookingSchema = z.object({
-  checkIn: z.string().min(1, 'Check-in date is required'),
+export const datesSchema = z.object({
+  checkIn:  z.string().min(1, 'Check-in date is required'),
   checkOut: z.string().min(1, 'Check-out date is required'),
-  guests: z.number().min(1).max(16),
-  name: z.string().min(2, 'Name must be at least 2 characters'),
+  guests:   z.number({ invalid_type_error: 'Guests is required' }).min(1).max(16),
+}).refine(d => d.checkOut > d.checkIn, {
+  message: 'Check-out must be after check-in',
+  path: ['checkOut'],
+})
+
+export const personalSchema = z.object({
+  name:  z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Valid email required'),
   phone: z.string().min(7, 'Valid phone number required'),
 })
 
-// TypeScript type is inferred from the schema — no duplication
-type BookingData = z.infer<typeof bookingSchema>
+export const paymentSchema = z.object({
+  card:   z.string().regex(/^\d{16}$/, '16-digit card number required'),
+  expiry: z.string().regex(/^\d{2}\/\d{2}$/, 'Format: MM/YY'),
+  cvv:    z.string().regex(/^\d{3}$/, '3-digit CVV required'),
+})
 
-function validateStep(data: Partial<BookingData>, step: number) {
-  // Pick only the fields relevant to this step
-  const stepSchemas = [
-    bookingSchema.pick({ checkIn: true, checkOut: true, guests: true }),
-    bookingSchema.pick({ name: true, email: true, phone: true }),
-  ]
-
-  // safeParse returns { success: true, data } or { success: false, error }
-  const result = stepSchemas[step]?.safeParse(data)
-  if (!result?.success) {
-    // flatten() converts Zod's error format to { fieldName: ['error message'] }
-    return result?.error.flatten().fieldErrors
-  }
-  return {}
-}
+// TypeScript types inferred from schemas — no separate interface needed
+export type DatesData    = z.infer<typeof datesSchema>
+export type PersonalData = z.infer<typeof personalSchema>
+export type PaymentData  = z.infer<typeof paymentSchema>
 ```
 
-**Why Zod over manual validation?**
-- Schema is the single source of truth for both validation and TypeScript types
-- Errors are structured and consistent
-- Composable — you can pick, omit, extend, and merge schemas
-- Works on both client and server (Node.js)
+### Key Zod Methods
+
+| Method | What it does |
+|--------|-------------|
+| `z.string().min(n, msg)` | Minimum string length |
+| `z.string().email(msg)` | Valid email format |
+| `z.string().regex(pattern, msg)` | Must match regex |
+| `z.number().min(n).max(n)` | Number range |
+| `z.boolean()` | Boolean field |
+| `z.enum(['a', 'b'])` | One of a fixed set of values |
+| `z.optional()` | Field is not required |
+| `.refine(fn, opts)` | Custom cross-field validation |
+| `z.infer<typeof schema>` | Extract TypeScript type |
 
 ---
 
-## File Upload with Preview
+## react-hook-form + Zod
+
+`react-hook-form` manages form state with minimal re-renders. With `@hookform/resolvers`, Zod validation runs automatically on submit and on blur — no manual validation code.
+
+```bash
+npm install react-hook-form @hookform/resolvers
+```
 
 ```tsx
-function ProfilePhotoUpload() {
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+
+function StepDates({ onNext }: { onNext: (data: DatesData) => void }) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<DatesData>({
+    resolver: zodResolver(datesSchema),
+  })
+
+  // handleSubmit only calls onNext if Zod validation passes
+  // otherwise it populates errors and the form stays put
+  return (
+    <form onSubmit={handleSubmit(onNext)}>
+      <div>
+        <label>Check-in</label>
+        <input type="date" {...register('checkIn')} />
+        {errors.checkIn && <p className="error">{errors.checkIn.message}</p>}
+      </div>
+      <div>
+        <label>Check-out</label>
+        <input type="date" {...register('checkOut')} />
+        {errors.checkOut && <p className="error">{errors.checkOut.message}</p>}
+      </div>
+      <div>
+        <label>Guests</label>
+        <input type="number" {...register('guests', { valueAsNumber: true })} />
+        {errors.guests && <p className="error">{errors.guests.message}</p>}
+      </div>
+      <button type="submit">Continue</button>
+    </form>
+  )
+}
+```
+
+`register` connects the input to the form — it spreads `name`, `ref`, `onChange`, and `onBlur` onto the input. `handleSubmit` wraps your submit handler and runs Zod validation first.
+
+### File Upload in a Form Step
+
+File inputs can't be registered with `register` the normal way — use `watch` + a manual `onChange`:
+
+```tsx
+function StepPersonal({ onNext, onBack }: { onNext: (d: PersonalData) => void; onBack: () => void }) {
+  const { register, handleSubmit, formState: { errors }, setError } = useForm<PersonalData>({
+    resolver: zodResolver(personalSchema),
+  })
   const [preview, setPreview] = useState<string | null>(null)
-  const [file, setFile] = useState<File | null>(null)
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0]
-    if (!selected) return
-
-    // Validate file type and size before creating a preview
-    if (!selected.type.startsWith('image/')) {
-      alert('Please select an image file')
-      return
-    }
-    if (selected.size > 5 * 1024 * 1024) {
-      alert('File must be under 5MB')
-      return
-    }
-
-    setFile(selected)
-    // URL.createObjectURL creates a temporary local URL for the file
-    // This lets you display the image without uploading it first
-    const url = URL.createObjectURL(selected)
-    setPreview(url)
-  }
-
-  // Object URLs hold a reference to the file in memory
-  // Revoke them when done to prevent memory leaks
-  useEffect(() => {
-    return () => { if (preview) URL.revokeObjectURL(preview) }
-  }, [preview])
-
-  const handleUpload = async () => {
+  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
     if (!file) return
-    // FormData is the correct way to send files — not JSON
-    const formData = new FormData()
-    formData.append('photo', file)
-    await fetch('/api/upload', { method: 'POST', body: formData })
+    if (file.size > 5 * 1024 * 1024) {
+      setError('root', { message: 'Photo must be under 5MB' })
+      return
+    }
+    setPreview(URL.createObjectURL(file))
   }
+
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
 
   return (
-    <div>
-      <input type="file" accept="image/*" onChange={handleChange} />
-      {preview && (
-        <img src={preview} alt="Preview" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover' }} />
-      )}
-      {file && <button onClick={handleUpload}>Upload</button>}
-    </div>
+    <form onSubmit={handleSubmit(onNext)}>
+      <input {...register('name')} placeholder="Full name" />
+      {errors.name && <p className="error">{errors.name.message}</p>}
+
+      <input type="email" {...register('email')} placeholder="Email" />
+      {errors.email && <p className="error">{errors.email.message}</p>}
+
+      <input {...register('phone')} placeholder="Phone" />
+      {errors.phone && <p className="error">{errors.phone.message}</p>}
+
+      <input type="file" accept="image/*" onChange={handlePhoto} />
+      {preview && <img src={preview} alt="Preview" className="photo-preview" />}
+      {errors.root && <p className="error">{errors.root.message}</p>}
+
+      <div className="form-actions">
+        <button type="button" onClick={onBack}>Back</button>
+        <button type="submit">Continue</button>
+      </div>
+    </form>
   )
 }
 ```
@@ -503,10 +603,11 @@ function ProfilePhotoUpload() {
 
 > See **[assignment-4.md](./assignment-4.md)** for the full description, file structure, acceptance criteria, and submission checklist.
 
-**Summary:** Build a full booking flow with TanStack Query for cached data fetching, a validated 4-step booking form with file upload, and optimistic updates.
+**Summary:** Build a full booking flow — a shared `fetch` wrapper in `src/lib/api.ts`, TanStack Query for cached listings with optimistic save/unsave, Zod schemas for all 3 form steps, and react-hook-form on each step with inline validation errors.
 
 ---
 
 **Resources**
 - [TanStack Query Docs](https://tanstack.com/query/latest)
 - [Zod Docs](https://zod.dev)
+- [react-hook-form Docs](https://react-hook-form.com)
